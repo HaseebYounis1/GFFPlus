@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.dll
+*.dylib
+*.obj
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.vscode/
+python/
+data/gff/localdb.json
+data/gff/localdb.tmp
+data/gff/*/
