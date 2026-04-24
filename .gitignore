@@ -11,6 +11,7 @@ dist/
 .venv/
 venv/
 .vscode/
+.test-tmp/
 python/
 data/gff/localdb.json
 data/gff/localdb.tmp

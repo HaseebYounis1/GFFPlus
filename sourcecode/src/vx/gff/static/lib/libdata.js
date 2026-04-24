@@ -223,6 +223,7 @@ function GraphFromFeatures() {
 
     this.featuresChecks = [];
     this.featuresChecks_count = 0;
+    this.featureSelectionTimer = null;
 
 /*     this.featuresChecks = [];
     this.featuresChecks_count = 0; */
@@ -233,6 +234,103 @@ function GraphFromFeatures() {
             rest[e.label] = e.name;
         }
         return rest;
+    };
+
+    this.normalizeFeatureSelection = function () {
+        var seen = {};
+        var clean = [];
+        for (var id of self.featureselected) {
+            id = parseInt(id, 10);
+            if (!isNaN(id) && !seen[id]) {
+                seen[id] = 1;
+                clean.push(id);
+            }
+        }
+        self.featureselected = clean;
+    };
+
+    this.selectFeatureIds = function (ids, mode) {
+        ids = (ids || []).map(function (id) {
+            return parseInt(id, 10);
+        }).filter(function (id) {
+            return !isNaN(id);
+        });
+        if (ids.length == 0) {
+            return;
+        }
+
+        var selected = {};
+        for (var id of self.featureselected) {
+            selected[parseInt(id, 10)] = 1;
+        }
+
+        if (mode == "add") {
+            for (var id of ids) {
+                selected[id] = 1;
+            }
+        }
+        else if (mode == "remove") {
+            for (var id of ids) {
+                delete selected[id];
+            }
+        }
+        else {
+            selected = {};
+            for (var id of ids) {
+                selected[id] = 1;
+            }
+        }
+
+        var taindex = self.auxfeatureselectedf[self.target];
+        if (taindex !== undefined) {
+            var nonTargetCount = Object.keys(selected).filter(function (id) {
+                return parseInt(id, 10) != taindex;
+            }).length;
+            if (self.intarget && nonTargetCount > 0) {
+                selected[taindex] = 1;
+            }
+            else if (nonTargetCount == 0) {
+                delete selected[taindex];
+            }
+        }
+
+        self.featureselected = Object.keys(selected).map(function (id) {
+            return parseInt(id, 10);
+        });
+        self.normalizeFeatureSelection();
+    };
+
+    this.onFeatureSelectionChanged = function (options) {
+        options = options || {};
+        self.normalizeFeatureSelection();
+
+        if (self.layoutfeatures != null && !options.skipFeatureHighlight) {
+            self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
+        }
+
+        if (gvalue('projection') == "simple") {
+            if (self.dataload && self.dataload.length > 0) {
+                self.plotpaiercorrelate();
+            }
+            else if (self.datafileselected != "") {
+                self.loadfilecsv(function () {
+                    self.plotpaiercorrelate();
+                });
+            }
+            return;
+        }
+
+        if (self.datafileselected == "" || self.featureselected.length < 2) {
+            return;
+        }
+
+        if (self.featureSelectionTimer) {
+            clearTimeout(self.featureSelectionTimer);
+        }
+        self.featureSelectionTimer = setTimeout(function () {
+            self.featureSelectionTimer = null;
+            self.visInstnaces();
+        }, 700);
     };
 
     this.makeInstancesLabels = function(colname){
@@ -252,6 +350,7 @@ function GraphFromFeatures() {
 
     this.getfeatureselected = function (){
         var featureselectedTrueIds = [];
+        self.normalizeFeatureSelection();
         for(var i of self.featureselected){
             label = self.getNode(i).label;
             //tid = self.lfenamesindex[label];
@@ -270,7 +369,9 @@ function GraphFromFeatures() {
             //rest.push(self.auxfeatureselectedf[nam]);
             
             //nam = self.datagff.fenames[i];
-            rest.push(self.auxfeatureselectedf[i]);            
+            if (i in self.auxfeatureselectedf) {
+                rest.push(self.auxfeatureselectedf[i]);
+            }
         }
         //console.log("WSDself.auxfeatureselectedf", self.auxfeatureselectedf);
         return rest;
@@ -1340,8 +1441,9 @@ function GraphFromFeatures() {
                     self.featureselected.push(taindex);
                 }
                 if (self.layoutfeatures != null) {
-                    self.layoutfeatures.highlightforce(self.featureselected);
+                    self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
                 }
+                self.onFeatureSelectionChanged({"skipFeatureHighlight": true});
             }
         }
         else {
@@ -1358,8 +1460,9 @@ function GraphFromFeatures() {
             self.featureselected = ref;
             //console.log("self.featureselected", self.auxfeatureselectedf, self.featureselected);
             if (self.layoutfeatures != null) {
-                self.layoutfeatures.highlightforce(self.featureselected);
+                self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
             }
+            self.onFeatureSelectionChanged({"skipFeatureHighlight": true});
         }
         self.changeintargetbtn();
     };
@@ -1543,8 +1646,9 @@ function GraphFromFeatures() {
         }
         if (featsel.length > 0) {
             self.featureselected = featsel;
-            self.layoutfeatures.highlightforce(self.featureselected);
+            self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
             gelem("fesenanetxt").value = nfilter.join('&&');
+            self.onFeatureSelectionChanged({"skipFeatureHighlight": true});
         }
     };
 

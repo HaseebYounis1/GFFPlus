@@ -62,7 +62,19 @@ function chart_circlepack(idview, selft, vertexcolorf){
       .style("fill", function(d) { 
         console.log("d.id", d.id);
         return d.children ? color(d.depth) : vertexcolorf(self.graph.nodes[d.data.id].weight); })
-      .on("click", function(d) { if (focus !== d) self.zoom(d), d3.event.stopPropagation(); });
+      .on("click", function(d) {
+        if (!d.children && d.data && d.data.id !== undefined && self.graph.nodes[d.data.id] && self.graph.nodes[d.data.id].category == 0) {
+          var mode = selft.ispresskey == 1 ? "add" : (selft.ispresskey == 2 ? "remove" : "replace");
+          selft.selectFeatureIds([d.data.id], mode);
+          self.highlightforce(selft.featureselected, {"silent": true});
+          selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
+          d3.event.stopPropagation();
+        }
+        else if (focus !== d) {
+          self.zoom(d);
+          d3.event.stopPropagation();
+        }
+      });
 
     var text = g.selectAll("text")
     .data(nodes)
@@ -106,8 +118,33 @@ function chart_circlepack(idview, selft, vertexcolorf){
     
     self.zoomTo([self.root.x, self.root.y, self.root.r * 2 + margin]);
     
-    self.highlightforce = function (ids) {
-      //implementing with ids
+    self.highlightforce = function (ids, options) {
+      ids = ids || [];
+      options = options || {};
+      circle
+        .style("stroke", "white")
+        .style("stroke-width", 0.75)
+        .style("opacity", function(d) {
+          return ids.length > 0 && !d.children ? 0.35 : 1.0;
+        });
+
+      var selected = {};
+      for (var id of ids) {
+        selected[id] = 1;
+      }
+      circle
+        .filter(function(d) {
+          return d.data && selected[d.data.id];
+        })
+        .style("opacity", 1.0)
+        .style("stroke", function() {
+          return d3.color(this.style.fill).darker();
+        })
+        .style("stroke-width", 2.25);
+
+      if (!options.silent) {
+        selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
+      }
     };
 
     this.updatelinkoption = function (limi, type) {

@@ -175,61 +175,23 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
     self.drawchart();
 
     this.selecnodes = function (d) {
-        if (selft.ispresskey == 1 || selft.ispresskey == 2) {
-            var auxfeatureselected = [];
-            var auxfeatureselected_vis = Array(self.graph.nodes.length).fill(0);
-            if (selft.ispresskey == 1 || selft.ispresskey == 2) {
-                for (var i in selft.featureselected) {
-                    var e = selft.featureselected[i];
-                    auxfeatureselected_vis[e] = 1;
-                }
-            }
-            else {
-                selft.featureselected = [];
-            }
-
-            var taindex = selft.auxfeatureselectedf[selft.target];
-            
-            if (d.data["id"] != taindex) {
-                auxfeatureselected.push(d.data["id"]);
-            }
-            
-            if (selft.ispresskey == 1) {
-                for (var i in auxfeatureselected) {
-                    var e = auxfeatureselected[i];
-                    var ev = auxfeatureselected_vis[e];
-                    if (ev == 0) {
-                        selft.featureselected.push(e);
-                    }
-                }
-            }
-            if (selft.ispresskey == 2) {
-                var aux2featureselected = [];
-                for (var i in auxfeatureselected) {
-                    var e = auxfeatureselected[i];
-                    auxfeatureselected_vis[e] = 2;
-                }
-                for (var i in selft.featureselected) {
-                    var e = selft.featureselected[i];
-                    if (auxfeatureselected_vis[e] != 2) {
-                        aux2featureselected.push(e);
-                    }
-                }
-                selft.featureselected = aux2featureselected;
-            }
-            if (selft.intarget && auxfeatureselected_vis[taindex] == 0 && selft.featureselected.length > 0) {
-                selft.featureselected.push(taindex);
-            }
-
-            self.highlightforce(selft.featureselected);
+        var node = self.graph.nodes[d.data["id"]];
+        if (node && node.category == 0) {
+            var mode = selft.ispresskey == 1 ? "add" : (selft.ispresskey == 2 ? "remove" : "replace");
+            selft.selectFeatureIds([d.data["id"]], mode);
+            self.highlightforce(selft.featureselected, {"silent": true});
+            selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
+            d3.event.stopPropagation();
         }
-        else{
+        else {
             d3.event.stopPropagation();
             focusOn(d);
         }
     };
 
-    this.highlightforce = function (ids) {
+    this.highlightforce = function (ids, options) {
+        ids = ids || [];
+        options = options || {};
         self.newSlice.selectAll(".main-arc")
             .style('stroke', '#ffffff')
             .style('opacity', function(d){
@@ -257,12 +219,17 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
                 cir = selectionBArray[self.pppi[ids[i]]];
                 //cir.style.stroke = d3.color(cir.style.fill).darker();
                 //cir.style.strokeWidth = 2.25;
-                cir.style.opacity = "1.0";
+                if (cir) {
+                    cir.style.opacity = "1.0";
+                }
 
 
                 // txt = selectionBArraytxt[self.pppi[ids[i]]];
                 // txt.style.stroke = d3.color(cir.style.fill).darker();
             }    
+        }
+        if (!options.silent) {
+            selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
         }
     };
 
@@ -281,7 +248,8 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
         if (selft.intarget && selft.featureselected.length > 0) {
             selft.featureselected.push(taindex);
         }
-        self.highlightforce(selft.featureselected);
+        self.highlightforce(selft.featureselected, {"silent": true});
+        selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
     };
 
     this.updatelinkoption = function (limi, type) {

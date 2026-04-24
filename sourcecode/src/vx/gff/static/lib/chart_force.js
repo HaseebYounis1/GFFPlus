@@ -151,7 +151,8 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             if (selft.intarget && auxfeatureselected_vis[taindex] == 0 && selft.featureselected.length > 0) {
                 selft.featureselected.push(taindex);
             }
-            self.highlightforce(selft.featureselected);
+            self.highlightforce(selft.featureselected, {"silent": true});
+            selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
             lassoPath.remove();
             lassoPath = null;
             lassoPolygon = null;
@@ -267,6 +268,13 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             .on("click", function (d, i) {
                 selft.keepselectvertex = i;
                 mouseoveredx(d);
+                if (d.category == 0) {
+                    var mode = selft.ispresskey == 1 ? "add" : (selft.ispresskey == 2 ? "remove" : "replace");
+                    selft.selectFeatureIds([d.name], mode);
+                    self.highlightforce(selft.featureselected, {"silent": true});
+                    selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
+                    d3.event.stopPropagation();
+                }
             });
         //.merge(self.node);
 
@@ -380,10 +388,13 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         if (selft.intarget && selft.featureselected.length > 0) {
             selft.featureselected.push(taindex);
         }
-        self.highlightforce(selft.featureselected);
+        self.highlightforce(selft.featureselected, {"silent": true});
+        selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
     };
 
-    this.highlightforce = function (ids) {
+    this.highlightforce = function (ids, options) {
+        ids = ids || [];
+        options = options || {};
         var selectionBArray = self.svgw.selectAll("circle").nodes();
         self.svgw.selectAll("circle")
             .style("stroke", "white")
@@ -431,9 +442,14 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         
         for (var i in ids) {
             cir = selectionBArray[ids[i]];
-            cir.style.stroke = d3.color(cir.style.fill).darker();
-            cir.style.strokeWidth = 2.25;
-            cir.style.opacity = "1.0";
+            if (cir) {
+                cir.style.stroke = d3.color(cir.style.fill).darker();
+                cir.style.strokeWidth = 2.25;
+                cir.style.opacity = "1.0";
+            }
+        }
+        if (!options.silent) {
+            selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
         }
     };
 
