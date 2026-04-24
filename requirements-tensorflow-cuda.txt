@@ -1,0 +1,3 @@
+# TensorFlow GPU install for Linux or Windows WSL2.
+# Native Windows TensorFlow 2.11+ runs CPU-only; use WSL2 for NVIDIA GPU support.
+tensorflow[and-cuda]==2.21.0

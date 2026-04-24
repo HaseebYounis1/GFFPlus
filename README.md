@@ -6,7 +6,7 @@ Rosane Minghim, Liz Huancapaza, Erasmo Artur, Guilherme P. Telles and Ivar V. Be
 
 ## Prerequisites
 Verify whether the following software is installed:
-* [Python](https://www.python.org/) - Python 3.9+;
+* [Python](https://www.python.org/) - Python 3.11 is recommended;
 * [Chrome](https://www.google.com/chrome/) or another modern browser;
 
 ## [Running directly](#running-directly)
@@ -16,6 +16,23 @@ Verify whether the following software is installed:
 * Run: `python run.py`
 * Open: `http://localhost:8000/`
 * Please login with user: `localuser` and password: `gff`
+
+## Optional XAI / ML environment
+Use Python 3.11 for the smoothest cross-platform path. Python 3.12 should also work for the current scientific stack, but 3.11 is the safer default for PyTorch, TensorFlow, SHAP, Captum, and older research packages.
+
+Install the base app first:
+* `python -m pip install -r requirements.txt`
+
+Then install optional explainability libraries:
+* `python -m pip install -r requirements-xai.txt`
+
+For NVIDIA GPU acceleration with PyTorch on Windows or Linux:
+* `python -m pip install -r requirements-torch-cu128.txt`
+
+For TensorFlow GPU acceleration, use Linux or Windows WSL2:
+* `python -m pip install -r requirements-tensorflow-cuda.txt`
+
+Native Windows TensorFlow 2.11+ is CPU-only. On macOS, TensorFlow has no official NVIDIA/CUDA path; Apple Silicon users should treat GPU acceleration separately from the CUDA setup.
 
 <!-- From Ubuntu run in termninal:
 * run.bat -->

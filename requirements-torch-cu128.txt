@@ -1,0 +1,7 @@
+# PyTorch CUDA 12.8 build for NVIDIA GPUs.
+# Works with newer NVIDIA drivers, including systems whose driver reports CUDA 13.x.
+--index-url https://download.pytorch.org/whl/cu128
+
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0

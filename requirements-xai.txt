@@ -1,0 +1,16 @@
+# Optional XAI / ML stack.
+# Install this after requirements.txt when you want to work on model explainability.
+#
+# PyTorch GPU users on Windows/Linux should install torch from the PyTorch CUDA
+# wheel index instead of this file:
+#   python -m pip install torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 --index-url https://download.pytorch.org/whl/cu128
+#
+# TensorFlow GPU on native Windows is not supported by current TensorFlow.
+# Use WSL2/Linux with:
+#   python -m pip install "tensorflow[and-cuda]==2.21.0"
+
+shap>=0.51.0,<0.52
+captum>=0.8.0,<0.9
+lime>=0.2.0.1,<0.3
+tensorflow>=2.21.0,<2.22; platform_system != "Windows"
+tensorflow>=2.21.0,<2.22; platform_system == "Windows"
