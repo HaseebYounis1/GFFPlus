@@ -32,6 +32,7 @@ class Server(tornado.web.Application):
             (r"/login", Login),
             (r"/logout", Logout),
             (r"/query", Query),
+            (r"/favicon.ico", tornado.web.RedirectHandler, {"url": "/img/icon.png"}),
 
             (r"/lib/(.*)",tornado.web.StaticFileHandler, {"path": Settings.STATIC_PATH+"/lib"},),
             (r"/img/(.*)",tornado.web.StaticFileHandler, {"path": Settings.STATIC_PATH+"/img"},),
@@ -69,8 +70,6 @@ class Server(tornado.web.Application):
 #    server.start(cpu_count())
 ##    tornado.ioloop.IOLoop.current().start()
 #    tornado.ioloop.IOLoop.instance().start()
-
-
 
 
 

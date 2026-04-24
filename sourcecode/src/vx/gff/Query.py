@@ -1090,6 +1090,8 @@ class DBFile:
     @staticmethod
     def openFile(pathf):
         dfile = {}
+        if not os.path.isfile(pathf):
+            return dfile
         try:
             #with open(pathf, mode="r", encoding='utf-8-sig') as fp:
             with open(pathf, mode="r", encoding='utf-8-sig') as fp:

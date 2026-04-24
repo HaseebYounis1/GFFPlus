@@ -547,6 +547,9 @@ function GraphFromFeatures() {
     this.processFeaturesResults = function(ds){
         self.shifflayoutcontrols("mainlayout");
         self.lfenamesindex = {};
+        ds.layoutfeature = ds.layoutfeature || {};
+        ds.layoutfeature.graph = ds.layoutfeature.graph || {"nodes": {}, "links": {}, "whole": {}};
+        ds.layoutfeature.graph.nodes = ds.layoutfeature.graph.nodes || {};
 
         if ("fenames" in ds) {
             strs = "";
@@ -678,6 +681,7 @@ function GraphFromFeatures() {
 
     this.processInstancesResults = function(ds){
         self.shifflayoutcontrols("mainlayout");
+        ds.layoutinstance = ds.layoutinstance || {};
         if ("lastversion" in ds && "versioninstance" in ds && ds["lastversion"] == ds["versioninstance"]) {
             //self.dataoutinstance = ds;
             if ("configinstance" in ds) {
