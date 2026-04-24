@@ -51,7 +51,14 @@ class LSPU(Projection):
 
     def execute(self):
         start = process_time()
-        self.smpsize = int(self.X.rows()/10.0)
+        n_rows = self.X.rows()
+        if n_rows == 0:
+            return []
+        if n_rows == 1:
+            return [[0.0, 0.0]]
+
+        self.smpsize = min(n_rows, max(2, int(math.sqrt(n_rows))))
+        self.knnsize = min(self.knnsize, max(1, n_rows - 1))
 
         #self.smp, self.clusterscentroids = Sampling.execute(self.X, self.smpsize, self.smptype, self.proxtype);
         self.smp, self.clusterscentroids = Sampling.executeFE(self.X, self.smpsize, self.smptype, self.proxtype);

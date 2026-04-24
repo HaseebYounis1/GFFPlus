@@ -358,12 +358,11 @@ function GraphFromFeatures() {
 
             }
             else if (ob.in.argms["projection"] == "simple") {
-                self.loadfilecsv();
-                setTimeout( function() {
-                                MOPRO.show("simple projection");
-                            }
-                            , 1);
-                setTimeout(self.plotpaiercorrelate, 100);
+                MOPRO.show("simple projection");
+                self.loadfilecsv(function () {
+                    self.plotpaiercorrelate();
+                    MOPRO.hide();
+                });
             }
             else {
                 ob.event = function () {
@@ -583,7 +582,7 @@ function GraphFromFeatures() {
                     gelem("target").selectedIndex = self.target;
                     
                 }
-                    confins = ds["configinstance"];
+                    confins = ds["configinstance"] || {};
                     if ("idinstanceslabels" in confins && confins["idinstanceslabels"]!="") {
                         const num = parseInt(confins["idinstanceslabels"], 10);
                         idcollabel = isNaN(num) ? 0 : num;
@@ -714,12 +713,14 @@ function GraphFromFeatures() {
             }
             if ("typeinstance" in ds) {
                 if (ds["typeinstance"] == "projection") {
-                    if ("layoutinstance" in ds && ds["layoutinstance"] != "") {
+                    if (ds.layoutinstance && Array.isArray(ds.layoutinstance.points) && ds.layoutinstance.points.length > 0) {
                         //var data = ds["layoutinstance"];
                         argms = {"infleft": 'infleft2',"infright": 'infright2'};
                         self.layoutinstance = new plotProjection(ProjectionColorF, "#visp", self, argms);
 
-                        self.auxfeatureselectedi = self.makeFeatureAux(self.datagff.configinstance.nodes);
+                        if (self.datagff.configinstance && self.datagff.configinstance.nodes) {
+                            self.auxfeatureselectedi = self.makeFeatureAux(self.datagff.configinstance.nodes);
+                        }
                     }
                 }
                 else if (ds["typeinstance"] == "graph") {
@@ -1066,10 +1067,13 @@ function GraphFromFeatures() {
         fi.value = "";
     };
 
-    this.loadfilecsv = function () {
+    this.loadfilecsv = function (callback) {
         //d3.csv("http://localhost:8888/data/"+datafileselected+"/transform.csv", function(datai) {
         d3.csv("./data/" + self.datafileselected + "/transform.csv", function (datai) {
             self.dataload = datai;
+            if (callback) {
+                callback(datai);
+            }
         });
     };
 
@@ -1122,7 +1126,14 @@ function GraphFromFeatures() {
     this.plotpaiercorrelate = function () {
         if (self.featureselected.length >= 2) {
             d3.select("#visp").selectAll("svg").remove();
-            chart_correlation("#visp", self.dataload, self.featureselected, gvalue('target'));
+            var featureids = self.getfeatureselected();
+            var featurenames = featureids.map(function (id) {
+                return self.datagff.fenames[id];
+            }).filter(function (name) {
+                return name !== undefined && name !== null;
+            });
+            var targetname = self.datagff.fenames[parseInt(gvalue('target'), 10)];
+            chart_correlation("#visp", self.dataload || [], featurenames, targetname);
         }
         //MOPRO.hide();
     };

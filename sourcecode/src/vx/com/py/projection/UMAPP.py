@@ -4,9 +4,17 @@
 # Copyright (c) 2020
 # E-mail: lizhh@usp.br
 
-import numpy as np
+import os
+import sys
+import warnings
 
-import umap
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 1))
+warnings.filterwarnings("ignore", message="Could not find the number of physical cores.*")
+
+import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.manifold import SpectralEmbedding
+from sklearn.preprocessing import normalize
 
 from vx.com.py.projection.Projection import *
 
@@ -18,8 +26,36 @@ class UMAPP(Projection):
         super().__init__(X,p)
 
     def execute(self):
-        X = self.X
-        #X = np.array(self.X)
-        print("umap",self.proxtype)
-        X2 = umap.UMAP(n_components=self.p, metric=self.proxtype, random_state=7).fit_transform(X)
+        X = np.asarray(self.X, dtype=float)
+        if X.shape[0] == 0:
+            return []
+        if X.shape[0] == 1:
+            return [[0.0, 0.0]]
+
+        n_neighbors = min(15, max(2, X.shape[0] - 1))
+        if sys.version_info < (3, 13):
+            try:
+                import umap
+                X2 = umap.UMAP(
+                    n_components=self.p,
+                    metric=self.proxtype,
+                    n_neighbors=n_neighbors,
+                    n_epochs=200,
+                    low_memory=False,
+                    random_state=7,
+                ).fit_transform(X)
+                return X2.tolist();
+            except Exception as exc:
+                print("UMAP failed; using spectral fallback:", exc)
+
+        Xwork = normalize(X) if self.proxtype == "cosine" else X
+        try:
+            X2 = SpectralEmbedding(
+                n_components=self.p,
+                n_neighbors=n_neighbors,
+                random_state=7,
+                affinity="nearest_neighbors",
+            ).fit_transform(Xwork)
+        except Exception:
+            X2 = PCA(n_components=self.p, random_state=7).fit_transform(Xwork)
         return X2.tolist();

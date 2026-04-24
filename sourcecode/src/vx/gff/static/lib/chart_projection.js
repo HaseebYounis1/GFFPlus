@@ -43,9 +43,17 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
     //console.log("dat",dat);
     //console.log("argms",argms);
 
-    gelem(argms["infleft"]).innerHTML = "TOTAL: " + selfgff.datagff.layoutinstance.points.length;
-    var data = selfgff.datagff.layoutinstance.points;
-    var targetsize = Object.keys(selfgff.datagff.layoutinstance.tartegsnames).length;
+    var layoutinstance = selfgff.datagff.layoutinstance || {};
+    var data = Array.isArray(layoutinstance.points) ? layoutinstance.points : [];
+    var targetNames = layoutinstance.tartegsnames || {};
+    var targetsize = Math.max(1, Object.keys(targetNames).length);
+
+    d3.select(idview).selectAll("svg").remove();
+    gelem(argms["infleft"]).innerHTML = "TOTAL: " + data.length;
+    if (data.length === 0) {
+        gelem(argms["infright"]).innerHTML = " / SELECTED: 0";
+        return;
+    }
     
     //var colors = dat.tartegscolors;
     var issel = 1;
@@ -154,7 +162,6 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
             self.container.attr("transform", self.transform);
         });
 
-    d3.select(idview).selectAll("svg").remove();
     this.svg = d3.select(idview)
         .append("svg")
         .attr("width", width + margin.left + margin.right)
@@ -319,4 +326,3 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
     };
 
 }
-

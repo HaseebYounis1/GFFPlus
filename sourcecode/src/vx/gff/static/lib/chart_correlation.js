@@ -5,6 +5,19 @@
 */
 
 function chart_correlation(idview, data, featuresels, target){
+    data = data || [];
+    featuresels = featuresels || [];
+    if (!Array.isArray(featuresels)) {
+      featuresels = Object.keys(featuresels);
+    }
+    featuresels = featuresels.filter(function (name) {
+      return name !== undefined && name !== null && name !== "" && data.length > 0 && Object.prototype.hasOwnProperty.call(data[0], name);
+    });
+    if (data.length === 0 || featuresels.length < 2 || !target || !Object.prototype.hasOwnProperty.call(data[0], target)) {
+      d3.select(idview).selectAll("svg").remove();
+      return;
+    }
+
     // Dimension of the whole chart. Only one size since it has to be square
     var marginWhole = {top: 10, right: 10, bottom: 10, left: 10},
 //    var marginWhole = {top: 0, right: 0, bottom: 0, left: 0},
@@ -51,10 +64,7 @@ function chart_correlation(idview, data, featuresels, target){
 //    d3.csv("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/iris.csv", function(data) {
 
       // What are the numeric variables in this dataset? How many do I have
-      var allVar = [];
-      for (var k in featuresels){
-        allVar.push(k);
-      }
+      var allVar = featuresels.slice();
       var numVar = allVar.length;
 
       // Now I can compute the size of a single chart
@@ -198,4 +208,3 @@ function chart_correlation(idview, data, featuresels, target){
       }
 //    });
 }
-

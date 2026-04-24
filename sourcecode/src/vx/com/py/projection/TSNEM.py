@@ -4,6 +4,12 @@
 # Copyright (c) 2020
 # E-mail: lizhh@usp.br
 
+import os
+import warnings
+
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 1))
+warnings.filterwarnings("ignore", message="Could not find the number of physical cores.*")
+
 import numpy as np
 
 from sklearn.manifold import TSNE
@@ -17,13 +23,20 @@ class TSNEM(Projection):
         super().__init__(X,p)
 
     def execute(self):
-        #X = self.X
-        X = np.array(self.X)
+        X = np.asarray(self.X, dtype=float)
+        if X.shape[0] == 0:
+            return []
+        if X.shape[0] == 1:
+            return [[0.0, 0.0]]
 
-
-        # X2 = TSNE(n_components=self.p, random_state=7, perplexity=40).fit_transform(X)
-        # return X2.tolist();
-        print("self.proxtype", self.proxtype)
-        X2 = TSNE(metric=self.proxtype, n_components=self.p, random_state=7, perplexity=10).fit_transform(X)
+        perplexity = min(30, max(1, (X.shape[0] - 1) // 3))
+        X2 = TSNE(
+            metric=self.proxtype,
+            n_components=self.p,
+            random_state=7,
+            perplexity=perplexity,
+            init="random" if self.proxtype == "cosine" else "pca",
+            learning_rate="auto",
+        ).fit_transform(X)
         return X2.tolist();
         

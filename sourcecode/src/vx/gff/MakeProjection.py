@@ -6,6 +6,15 @@
 
 from vx.gff.Settings import *
 
+import os
+import warnings
+from time import process_time
+
+import numpy as np
+
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 1))
+warnings.filterwarnings("ignore", message="Could not find the number of physical cores.*")
+
 from vx.com.px.dataset.dataio_pure import DataMatrix, ProximityMatrix
 
 from vx.com.py.matrix.CSVData import *
@@ -22,11 +31,10 @@ class MakeProjection():
         mt = argms["projection"]
         projprox = argms["instanceproximity"]
 
-        featureselected= argms["featureselected"]
+        featureselected = [int(index) for index in argms.get("featureselected", [])]
         filefepath = Settings.DATA_PATH+argms["file"]+"/"
         filefe = filefepath+"transform.csv"
-        isfeature = True if int(argms["isfeature"])==1 else False
-        targeti = argms["target"]
+        targeti = int(argms["target"])
 
         # df = pd.read_csv(filefe)
         # dmat = MData.openfilecsv(filefe)
@@ -82,18 +90,14 @@ class MakeProjection():
 
         X2 = []
 
-        dissx = "euclidean"
-        if projprox=="DCosine":
-            dissx = "cosine"
+        metric = "cosine" if projprox == "DCosine" else "euclidean"
 
         if mt == "tsne":
             from vx.com.py.projection.TSNEM import TSNEM
-            #X2 = TSNEP(X).execute();
-            X2 = TSNEM(X, proxtype=dissx).execute();
+            X2 = TSNEM(X, proxtype=metric).execute();
         elif mt == "umap":
             from vx.com.py.projection.UMAPP import UMAPP
-            X2 = UMAPP(X, proxtype=dissx).execute();
-            #X2 = None
+            X2 = UMAPP(X, proxtype=metric).execute();
         # elif mt == "mds":
         #     X2 = MDSP(X).execute();
         # elif mt == "pca":
@@ -107,15 +111,13 @@ class MakeProjection():
         elif mt == "lsptsne":
             from vx.com.py.projection.LSPU import LSPU
             from vx.com.py.projection.TSNEM import TSNEM
-            #X2 = LSP(X, smpprj=TSNEP(), smptype="clusteringmedoids").execute()
-
-            #X2 = LSP(X, smpprj=TSNEM(), smptype="clusteringmedoids").execute()
-
             X2 = LSPU(  X=XR,
-                        smpprj=TSNEM(proxtype=dissx),
+                        smpprj=TSNEM(proxtype=metric),
                         proxtype=ProximityMatrix.POT[projprox],
                         smptype="clusteringmedoids"
                     ).execute()
+        else:
+            X2 = self._pair_projection(X)
             
         # elif mt == "lspisomap":
         #     X2 = LSP(X, smpprj=ISOMAPP(), smptype="clusteringmedoids").execute()
@@ -161,3 +163,12 @@ class MakeProjection():
         del XDF
         del XR
         del X
+
+    @staticmethod
+    def _pair_projection(X):
+        data = np.asarray(X, dtype=float)
+        if data.ndim != 2 or data.shape[0] == 0:
+            return []
+        if data.shape[1] == 1:
+            return np.column_stack([data[:, 0], np.zeros(data.shape[0])]).tolist()
+        return data[:, :2].tolist()

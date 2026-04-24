@@ -63,10 +63,11 @@ class Query(BaseHandler):
                     # 0:ok; 1:working; 2:error
                     # lock dataset
                     status = Query.getStatus(app)
-                    if status["statusopt"]==0:
+                    if status["statusopt"] in (0, 2):
                         Query.setStatus(app, 1);
                         t = threading.Thread(target=Query.processFeatures, args=(app,))
                         t.start()
+                        status = Query.getStatus(app)
 
                     obj = ujson.dumps(status);
 
@@ -74,10 +75,11 @@ class Query(BaseHandler):
                 # 0:ok; 1:working; 2:error
                 # lock dataset
                 status = Query.getStatus(app)
-                if status["statusopt"]==0:
+                if status["statusopt"] in (0, 2):
                     Query.setStatus(app, 1);
                     t = threading.Thread(target=Query.processInstances, args=(app,))
                     t.start()
+                    status = Query.getStatus(app)
                 
                 obj = ujson.dumps(status);
 
@@ -206,14 +208,12 @@ class Query(BaseHandler):
             app.argms["rankingmax"] = g.data["rankingmax"];
 
             Query.savegraph(app,g.data);
+            Query.setStatus(app, 0);
          
         except Exception as e:
             # error dataset
             print("error in save graph", e)
             Query.setStatus(app, 2);
-        finally:
-            # unlock dataset
-            Query.setStatus(app, 0);
         
         #Query.setStatus(app, 0)
 
@@ -224,13 +224,11 @@ class Query(BaseHandler):
             dap = MakeProjection()
             dap.execute(app.argms);
             Query.saveprojection(app,dap.data);
+            Query.setStatus(app, 0);
         except Exception as e:
             # error dataset
             print("error save projection", e)
             Query.setStatus(app, 2);
-        finally:
-            # unlock dataset
-            Query.setStatus(app, 0);
 
 
 
@@ -612,9 +610,11 @@ class Query(BaseHandler):
 
     @staticmethod
     def setStatus(app, k):
-        if "file" in app.argms and app.argms["file"]!="" and "statusval" in app.argms and app.argms["statusval"]!="":
+        if "file" in app.argms and app.argms["file"]!="":
             idin = Query.converid(app.argms["file"])
-            statusval = app.argms["statusval"]
+            statusval = app.argms.get("statusval", "")
+            if k == 0:
+                statusval = ""
             
             DBX.update(DBS.DBGFF, "data",
                                     {'_id': idin},

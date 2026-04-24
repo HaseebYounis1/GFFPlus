@@ -18,7 +18,7 @@ Verify whether the following software is installed:
 * Please login with user: `localuser` and password: `gff`
 
 ## Optional XAI / ML environment
-Use Python 3.11 for the smoothest cross-platform path. Python 3.12 should also work for the current scientific stack, but 3.11 is the safer default for PyTorch, TensorFlow, SHAP, Captum, and older research packages.
+Use Python 3.11 for the smoothest cross-platform path. Python 3.12 should also work for the current scientific stack, but 3.11 is the safer default for PyTorch, TensorFlow, SHAP, Captum, UMAP, and older research packages. Python 3.13 can run the base app, but UMAP uses a scikit-learn fallback because `umap-learn`/Numba is not a reliable Windows path there yet.
 
 Install the base app first:
 * `python -m pip install -r requirements.txt`
