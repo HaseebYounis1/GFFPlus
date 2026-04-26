@@ -648,8 +648,14 @@ function GraphFromFeatures() {
         self.shifflayoutcontrols("mainlayout");
         self.lfenamesindex = {};
         ds.layoutfeature = ds.layoutfeature || {};
-        ds.layoutfeature.graph = ds.layoutfeature.graph || {"nodes": {}, "links": {}, "whole": {}};
-        ds.layoutfeature.graph.nodes = ds.layoutfeature.graph.nodes || {};
+        ds.layoutfeature.graph = ds.layoutfeature.graph || {};
+        ds.layoutfeature.graph.nodes = ds.layoutfeature.graph.nodes || [];
+        ds.layoutfeature.graph.links = ds.layoutfeature.graph.links || [];
+        ds.layoutfeature.graph.whole = ds.layoutfeature.graph.whole || [];
+        ds.layoutfeature.root = ds.layoutfeature.root || [];
+        ds.layoutfeature.treehi = ds.layoutfeature.treehi || [];
+        ds.layoutfeature.edgehist = ds.layoutfeature.edgehist || [];
+        ds.layoutfeature.ranking = ds.layoutfeature.ranking || [];
 
         if ("fenames" in ds) {
             strs = "";

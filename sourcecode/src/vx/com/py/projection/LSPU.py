@@ -17,7 +17,7 @@ import math
 from time import process_time 
 
 
-from scipy.sparse.linalg import lsqr
+from scipy.sparse.linalg import lsqr, spsolve
 
 
 from vx.com.py.proximity.ANNFE import *
@@ -145,16 +145,19 @@ class LSPU(Projection):
         A = sA.makeScipySparse(rows, cols)
         B = sB.makeScipySparse(rows, 2)
 
-        # ATA = (A.T*A)
-        # ATB = (A.T*B)
-        # factor = cholesky(ATA, beta=1.0)
-        # x2 = factor(ATB).toarray()
-        
-
-        x2 = np.column_stack([
-            lsqr(A, B[:, col].toarray().ravel())[0]
-            for col in range(B.shape[1])
-        ])
+        ATA = A.T @ A
+        ATB = A.T @ B
+        try:
+            x2 = np.asarray(spsolve(ATA.tocsc(), ATB.toarray()), dtype=float)
+            if x2.ndim == 1:
+                x2 = x2.reshape((-1, 1))
+            if not np.isfinite(x2).all():
+                raise ValueError("LSP direct solver returned non-finite values")
+        except Exception:
+            x2 = np.column_stack([
+                lsqr(A, B[:, col].toarray().ravel(), atol=1e-12, btol=1e-12)[0]
+                for col in range(B.shape[1])
+            ])
 
         # print(ATA)
         # print(ATB)

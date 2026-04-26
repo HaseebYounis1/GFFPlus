@@ -1093,12 +1093,9 @@ class DBFile:
         if not os.path.isfile(pathf):
             return dfile
         try:
-            #with open(pathf, mode="r", encoding='utf-8-sig') as fp:
-            with open(pathf, mode="r", encoding='utf-8-sig') as fp:
-                dfile = ujson.load(fp)
-            """ with DBFile.global_lock:
+            with DBFile.global_lock:
                 with open(pathf, mode="r", encoding='utf-8-sig') as fp:
-                    dfile = ujson.load(fp) """
+                    dfile = ujson.load(fp)
                     
         except Exception as e:
             print("Error opening file", e, pathf)
@@ -1114,24 +1111,31 @@ class DBFile:
 
 
 
-    """ multithreadiung write file """
+    """ write JSON atomically so large layouts are never read half-written """
     @staticmethod
     def writeFile_t(pathf, rdata):
+        tmpf = None
         try:
-            #with open(pathf, mode="w", encoding='utf-8-sig') as fp:
-            #    ujson.dump(rdata, fp)
             with DBFile.global_lock:
-                #with open(pathf, mode="w", encoding='utf-8-sig') as fp:
-                with open(pathf, mode="w", encoding='utf-8-sig') as fp:
+                os.makedirs(os.path.dirname(pathf), exist_ok=True)
+                tmpf = "{}.{}.tmp".format(pathf, uuid.uuid4().hex)
+                with open(tmpf, mode="w", encoding='utf-8-sig') as fp:
                     ujson.dump(rdata, fp, ensure_ascii=False)
+                    fp.flush()
+                    os.fsync(fp.fileno())
+                os.replace(tmpf, pathf)
 
         except Exception as e:
-            print("Error writing file", pathf)
+            print("Error writing file", e, pathf)
+            if tmpf and os.path.exists(tmpf):
+                try:
+                    os.remove(tmpf)
+                except OSError:
+                    pass
 
     @staticmethod
     def writeFile(pathf, rdata):
-        t = threading.Thread(target=DBFile.writeFile_t, args=[pathf, rdata,])
-        t.start()
+        DBFile.writeFile_t(pathf, rdata)
 
 
 

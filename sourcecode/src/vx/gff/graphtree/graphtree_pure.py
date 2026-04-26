@@ -303,9 +303,7 @@ class Graph:
             postprocessinghist(hist)
         #add tree childs
         if algorithm=="mst" or algorithm=="nj":
-            #newtreee = newtree(root, graph["nodes"], self.data["initvertex2"])
-            #print("11111111111111111111111111")
-            #self.data["tree"] = newtree(root, graph["nodes"], self.data["initvertex2"])
+            self.data["tree"] = newtree(root, graph["nodes"], self.data["initvertex2"])
             #print("22222222222222222222222222")
             #self.data["tree"] = maingettree(root, graph["nodes"], self.data["initvertex2"])
             #print("TREEEEEEEEE",self.data["tree"])

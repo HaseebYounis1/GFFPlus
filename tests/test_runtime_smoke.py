@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import numpy as np
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "sourcecode" / "src"
@@ -12,6 +14,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from vx.com.py.database.MongoDB import MongoDB
+from vx.com.py.projection.LSPU import LSPU
+from vx.gff.graphtree.graphtree_pure import Graph
 from vx.gff.MakeProjection import MakeProjection
 from vx.gff.Query import DBFile, Query
 from vx.gff.Settings import Settings
@@ -98,6 +102,60 @@ class RuntimeSmokeTests(unittest.TestCase):
         status = Query.getStatus(app)
         self.assertEqual(status["statusopt"], 0)
         self.assertEqual(status["statusval"], "")
+
+    def test_dbfile_write_is_atomic_and_reloadable(self):
+        path = Path(Settings.DATA_PATH) / self.dataset_id / "feature.obj"
+        payload = {
+            "graph": {
+                "nodes": [{"name": i, "weight": float(i)} for i in range(200)],
+                "links": [],
+                "whole": [],
+            },
+            "tree": {"id": 0, "children": [{"id": 1, "size": 1.0}]},
+        }
+
+        DBFile.writeFile(str(path), payload)
+        loaded = DBFile.openFile(str(path))
+
+        self.assertEqual(len(loaded["graph"]["nodes"]), 200)
+        self.assertEqual(loaded["tree"]["children"][0]["id"], 1)
+
+    def test_feature_graph_contains_tree_and_edge_payloads(self):
+        graph = Graph()
+        graph.make_graph(
+            Settings.DATA_PATH,
+            [],
+            {
+                "file": self.dataset_id,
+                "proximity": "Euclidean",
+                "target": 3,
+                "algorithm": "mst",
+                "relevance": "Correlation",
+                "isfeature": 1,
+            },
+        )
+
+        layout = graph.data
+        self.assertEqual(len(layout["graph"]["nodes"]), 4)
+        self.assertEqual(len(layout["graph"]["links"]), 3)
+        self.assertGreaterEqual(len(layout["graph"]["whole"]), 3)
+        self.assertIn("id", layout["tree"])
+        self.assertGreater(len(layout["treehi"]), 0)
+        self.assertEqual(len(layout["edgehist"]), 400)
+
+    def test_lsp_solver_keeps_shape_and_anchor_values_finite(self):
+        neighbors = [
+            [(1, 1.0), (2, 2.0)],
+            [(0, 1.0), (3, 2.0)],
+            [(0, 2.0), (3, 1.0)],
+            [(1, 2.0), (2, 1.0)],
+        ]
+        projected = LSPU.projectionls(neighbors, [0, 3], [[0.0, 0.0], [1.0, 1.0]])
+
+        self.assertEqual(projected.shape, (4, 2))
+        self.assertTrue(np.isfinite(projected).all())
+        self.assertLess(np.linalg.norm(projected[0] - np.array([0.0, 0.0])), 0.5)
+        self.assertLess(np.linalg.norm(projected[3] - np.array([1.0, 1.0])), 0.5)
 
 
 if __name__ == "__main__":

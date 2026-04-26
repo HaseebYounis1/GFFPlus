@@ -45,7 +45,14 @@ function chart_circlepack(idview, selft, vertexcolorf){
 
     //d3.json(data, function(error, root) {
     //  if (error) throw error;
-    self.root = selft.datagff.layoutfeature["tree"];  
+    self.root = selft.datagff.layoutfeature["tree"];
+    if (!self.root || Object.keys(self.root).length == 0) {
+      self.root = makecirclepacktree(
+        selft.datagff.layoutfeature["root"],
+        self.graph["nodes"],
+        selft.datagff.layoutfeature["initvertex2"]
+      );
+    }
     self.root = d3.hierarchy(self.root)
       .sum(function(d) { return d.size*50; })
 //      .sum(function(d) { return 500; })
@@ -161,4 +168,35 @@ function chart_circlepack(idview, selft, vertexcolorf){
         //
     };
 
+}
+
+function makecirclepacktree(graph, nodes, root){
+    var visited = Array(graph.length).fill(false);
+    var rootId = parseInt(root, 10);
+    var tree = {"id": rootId, "name": nodes[rootId]["label"], "size": nodes[rootId]["weight"] + 0.01};
+    var queue = [tree];
+    while (queue.length > 0) {
+        var current = queue.shift();
+        var id = current["id"];
+        if (graph[id] && Object.keys(graph[id]).length > 0) {
+            current["children"] = [];
+        }
+        for (var child in graph[id]) {
+            var childId = parseInt(child, 10);
+            if (!visited[childId]) {
+                var childNode = {
+                    "id": childId,
+                    "name": nodes[childId]["label"],
+                    "size": nodes[childId]["weight"] + 0.01
+                };
+                current["children"].push(childNode);
+                queue.push(childNode);
+            }
+        }
+        visited[id] = true;
+        if (current["children"] && current["children"].length == 0) {
+            delete current["children"];
+        }
+    }
+    return tree;
 }
