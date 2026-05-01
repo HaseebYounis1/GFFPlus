@@ -2,6 +2,36 @@
 
 This file tracks the lightweight extensions and performance work added on top of the original GFF application.
 
+## Bug Fixes
+
+- **Bipartite graph stuck on "get unselected features"**
+  - Root cause: `ServiceData.start()` called `self.event()` asynchronously with
+    no inner try/catch. Any exception (e.g. null server response) silently
+    escaped, leaving `MOPRO.popprocess()` uncalled and the loading overlay
+    frozen permanently.
+  - `ServiceData.start()` now wraps `self.event()` in an inner try/catch so
+    `MOPRO.popprocess(ps)` is always called regardless of what the event handler
+    does.
+  - `getUnselecteFeatures` event now defaults a null/missing server response to
+    `[]` before passing it to `USFOBJ`.
+  - `UnselectedFeatures.load()` now guards against `null` with
+    `if (!Array.isArray(...)) return` before the `for...of` loop.
+
+- **Tornado serving stale JS after edits**
+  - `"debug": Settings.DEBUG` was commented out in `Server.py`, so Tornado ran
+    without debug mode and set aggressive `Cache-Control` headers on `/lib/*.js`.
+    Browsers served the old files even after on-disk changes.
+  - Re-enabled `"debug": Settings.DEBUG` (value is `True`). Tornado now sets
+    no-cache headers on static files, so edits are picked up on the next
+    normal page load.
+
+- **`chart_bipartite` and `chart_feature_community` crash before draw**
+  - Both charts call `highlightforce()` and `updateedgestransparency()` as
+    public methods (triggered by `onFeatureSelectionChanged`) before `draw()`
+    has populated `self.link` and `self.node`.
+  - Added `self.link = null` / `self.node = null` initialisers at construction
+    and early-return guards at the top of both methods.
+
 ## Added
 
 - **UpSet feature layout**
@@ -72,9 +102,11 @@ This file tracks the lightweight extensions and performance work added on top of
 
 ## Planned
 
-- Optional approximate feature graph mode for very wide datasets.
-- UI hint showing when a projection was automatically switched to a faster method.
-- Optional sampling controls for exploratory previews on very large datasets.
+- UI hint in the instance panel showing when a projection was automatically
+  switched to a faster method (e.g. t-SNE → PCA for large datasets).
+- Expose the row-sampling cap (`max_rows=5000` in `proximitymatrix_cols` and
+  the ExtraTrees fit) as a user-visible setting for power users who need finer
+  control over accuracy vs. speed.
 
 ## Graph Methods That Align With GFF
 

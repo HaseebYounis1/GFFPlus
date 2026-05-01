@@ -239,6 +239,73 @@ reducing the BLAS multiply from (784 × 60 000) @ (60 000 × 784) to
 
 ---
 
+## 11. `sourcecode/src/vx/gff/Server.py`
+
+### Problem
+`"debug": Settings.DEBUG` was commented out in the Tornado application
+settings. `Settings.DEBUG = True` but was never passed to Tornado, so it ran
+in production mode and set long `Cache-Control` headers on every `/lib/*.js`
+file. After any JS edit, browsers served the stale cached version.
+
+### Fix
+Uncommented `"debug": Settings.DEBUG`. Tornado now honours the `True` value,
+disables static-file caching, and auto-reloads on Python file changes.
+
+---
+
+## 12. `sourcecode/src/vx/gff/static/lib/libdata.js`
+
+### Problem — `ServiceData.start()` spinner stuck permanently
+
+`ServiceData.start()` called `self.event()` inside the async `d3.json`
+callback with no inner try/catch. Any exception thrown by an event handler
+(including a `TypeError: null is not iterable` from `UnselectedFeatures.load`
+when the server returned a null response) silently escaped the callback,
+leaving `MOPRO.popprocess(ps)` uncalled. The loading overlay then showed the
+last pushed process name forever.
+
+The specific trigger: D3 v4 wraps a 1-argument callback so that on HTTP error
+it receives `null` instead of data. `getUnselecteFeatures`'s event passed that
+`null` to `USFOBJ.load()` which called `for (var id of null)`, throwing.
+
+### Fix
+- `ServiceData.start()`: added an inner `try/catch` around `self.event()`;
+  `MOPRO.popprocess(ps)` is now always reached.
+- `getUnselecteFeatures` event: `self.unselectedfeids = Array.isArray(this.ou) ? this.ou : []`.
+- `UnselectedFeatures.load()`: added `if (!Array.isArray(selfgff.unselectedfeids)) return`.
+
+---
+
+## 13. `sourcecode/src/vx/gff/static/lib/UnselectedFeatures.js`
+
+### Problem
+`load()` iterated directly over `selfgff.unselectedfeids` with `for...of`.
+If the field was `null` (null server response or uninitialised), this threw
+`TypeError: null is not iterable`, propagating up and preventing MOPRO cleanup.
+
+### Fix
+Added `if (!Array.isArray(selfgff.unselectedfeids)) return;` before the loop.
+
+---
+
+## 14. `sourcecode/src/vx/gff/static/lib/chart_bipartite.js` and `chart_feature_community.js`
+
+### Problem
+Both charts expose `highlightforce()` and `updateedgestransparency()` as public
+methods called externally (via `selft.layoutfeatures.highlightforce(...)` from
+`onFeatureSelectionChanged`). These methods reference `self.link` and
+`self.node`, which are only assigned inside `draw()`. If the CSV is still
+loading when `draw()` returns early, or if `onFeatureSelectionChanged` fires
+before `draw()` completes, both methods crash with
+`TypeError: Cannot read properties of null`.
+
+### Fix
+- Added `self.link = null; self.node = null;` at construction time.
+- Added `if (!self.node || !self.link) return;` at the top of `highlightforce`.
+- Added `if (!self.link) return;` at the top of `updateedgestransparency`.
+
+---
+
 ## Test coverage
 
 `tests/test_optimizations.py` — 52 new tests across 8 test classes:
