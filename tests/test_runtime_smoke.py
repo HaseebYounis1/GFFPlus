@@ -78,6 +78,22 @@ class RuntimeSmokeTests(unittest.TestCase):
         self.assertIn("x", projection.data["points"][0])
         self.assertIn("y", projection.data["points"][0])
 
+    def test_pca_projection_outputs_one_point_per_row(self):
+        projection = MakeProjection()
+        projection.execute(self._projection_args("pca"))
+
+        self.assertEqual(len(projection.data["points"]), 4)
+        self.assertIn("x", projection.data["points"][0])
+        self.assertIn("y", projection.data["points"][0])
+
+    def test_mds_projection_outputs_one_point_per_row(self):
+        projection = MakeProjection()
+        projection.execute(self._projection_args("mds"))
+
+        self.assertEqual(len(projection.data["points"]), 4)
+        self.assertIn("x", projection.data["points"][0])
+        self.assertIn("y", projection.data["points"][0])
+
     def test_dbfile_missing_layout_returns_empty_dict(self):
         missing = Path(Settings.DATA_PATH) / self.dataset_id / "missing.obj"
         self.assertEqual(DBFile.openFile(str(missing)), {})

@@ -40,56 +40,31 @@ class MData:
 
     @staticmethod
     def samplex(X, smp_r=None, smp_c=None):
-        S = []
-        if smp_r!=None and smp_c==None:
-            for i in smp_r:
-                S.append(X[i])
-        if smp_r==None and smp_c!=None:
-            for i in range(len(X)):
-                row = []
-                for j in smp_c:
-                    row.append(X[i][j])
-                S.append(row)
-                
-        if smp_r!=None and smp_c!=None:
-            for i in smp_r:
-                row = []
-                for j in smp_c:
-                    row.append(X[i][j])
-                S.append(row)
-        return S
+        if smp_r is None and smp_c is None:
+            return X
+        arr = np.asarray(X, dtype=float)
+        if smp_r is not None and smp_c is None:
+            return arr[smp_r].tolist()
+        if smp_r is None and smp_c is not None:
+            return arr[:, smp_c].tolist()
+        return arr[np.ix_(smp_r, smp_c)].tolist()
 
     # output: id of poin of controls
     @staticmethod
     def openfilecsv(filename):
         df = pd.read_csv(filename, delimiter=",")
-        
-        columns = df.columns.tolist()
-        columns_aux = []
-        for col in columns:
-            if col != "INDEXIDUID_":
-                columns_aux.append(col)
-        columns = columns_aux
+        columns = [c for c in df.columns.tolist() if c != "INDEXIDUID_"]
         df = df[columns]
-        
-        #print("df.columns.tolist()", df.columns.tolist())
 
-        cat_columns = df.select_dtypes(['object']).columns
-        df[cat_columns] = df[cat_columns].astype('category')
-        for col in cat_columns:
-            df[col] = df[col].cat.codes        
+        cat_columns = df.select_dtypes(["object"]).columns
+        if len(cat_columns):
+            df[cat_columns] = df[cat_columns].apply(
+                lambda col: col.astype("category").cat.codes
+            )
 
-        X = [];
-        for index, row in df.iterrows():
-            rw = []
-            for k, v in row.items():
-                rw.append(v)
-            X.append(rw)
-
-        columns_i = {str(columns[i]):i for i in range(len(columns))}
-
-        md = MData(X, columns, columns_i)
-        return md
+        X = df.to_numpy(dtype=float).tolist()
+        columns_i = {str(columns[i]): i for i in range(len(columns))}
+        return MData(X, columns, columns_i)
 
     # input: smpsize, fematrix, prox
     # output: id of poin of controls

@@ -209,7 +209,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
             selfgff.setToolpiltex(
                 d3.event.pageX,
                 d3.event.pageY,
-                "ID:"+selfgff.idinstancelabel[d.id]+""
+                "ID:"+selfgff.getInstanceLabel(d.id)+""
                 );
 
         })
@@ -224,7 +224,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         self.nodesc.append("title")
         .text(function (d) {
             //console.log("d.id", d.id, selfgff.idinstancelabel);
-            return "ID: " + selfgff.idinstancelabel[d.id]; 
+            return "ID: " + selfgff.getInstanceLabel(d.id); 
             
             });
          */
@@ -276,7 +276,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
     this.exwholeinstancesprj = function() {
         var txtex = "DY\n"+data.length+"\n2\nx;y\n";
         for (var i in data){
-            txtex += selfgff.idinstancelabel[i]+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
+            txtex += selfgff.getInstanceLabel(i)+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
         }
         var hiddenElement = document.createElement('a');
         hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);
@@ -293,7 +293,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         if (self.selected.length>0){        
             var txtex = "DY\n"+self.selected.length+"\n2\nx;y\n";
             for (var i of self.selected){
-                txtex += selfgff.idinstancelabel[i]+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
+                txtex += selfgff.getInstanceLabel(i)+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
             }
             var hiddenElement = document.createElement('a');
             hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);
@@ -311,7 +311,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         if (self.selected.length>0){
             var txtex = "";
             for (var i of self.selected){
-                txtex += selfgff.idinstancelabel[i]+"\n";
+                txtex += selfgff.getInstanceLabel(i)+"\n";
             }
             var hiddenElement = document.createElement('a');
             hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);

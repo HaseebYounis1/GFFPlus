@@ -46,28 +46,23 @@ function ServiceData(pname) {
     this.event = function () { };
     
     this.start = function () {
-        //ep = new ElementMP();
-        //ep.name = pname;
-        //ep.process = function (){
         var ps = MOPRO.pushprocess(pname);
-        //MOPRO.show(pname);
         try {
             var url = "./query?data=" + JSON.stringify(self.in);
             d3.json(url, function (data) {
                 self.ou = data;
-                self.event();
+                try {
+                    self.event();
+                } catch (err) {
+                    console.log(pname + " event error:", err);
+                }
                 MOPRO.popprocess(ps);
             });
         }
         catch (err) {
-            //MOPRO.hide();
             MOPRO.popprocess(ps);
-            //MPRO.delete(this.id);
             console.log(err);
         }
-        //};
-        //key = MPRO.insert(ep);
-        ////
     };
 }
 
@@ -185,6 +180,9 @@ function GraphFromFeatures() {
     this.layoutinstance = null;
 
     this.dataload = [];
+    this.dataloadfile = "";
+    this.dataloadcallbacks = [];
+    this.isloadingcsv = false;
     this.datafiles = [];
     this.featureselected = [];
     //this.ranking = [];
@@ -324,6 +322,13 @@ function GraphFromFeatures() {
             return;
         }
 
+        var projection = gvalue('projection');
+        if (projection != "pca") {
+            gelem("topleft2").innerHTML = "Projection ready";
+            gelem("topright2").innerHTML = "Press execute to update " + projection.toUpperCase();
+            return;
+        }
+
         if (self.featureSelectionTimer) {
             clearTimeout(self.featureSelectionTimer);
         }
@@ -339,12 +344,17 @@ function GraphFromFeatures() {
             ob.in.argms["type"] = 21;
             ob.in.argms["file"] = self.datafileselected;
             ob.in.argms["idinstanceslabels"] = parseInt(colname);
+            ob.in.argms["maxlabels"] = 5000;
 
             ob.event = function () {
-                self.idinstancelabel = this.ou;
+                self.idinstancelabel = Array.isArray(this.ou) ? this.ou : [];
             };
             ob.start();
         }
+    };
+
+    this.getInstanceLabel = function(id){
+        return self.idinstancelabel[id] !== undefined ? self.idinstancelabel[id] : id;
     };
 
 
@@ -694,11 +704,9 @@ function GraphFromFeatures() {
                         const num = parseInt(confins["idinstanceslabels"], 10);
                         idcollabel = isNaN(num) ? 0 : num;
                         gelem('idinstanceslabels').selectedIndex = idcollabel;
-                        self.makeInstancesLabels(idcollabel);
                     }
                     else{
                         gelem('idinstanceslabels').selectedIndex = 0;
-                        self.makeInstancesLabels(gelem('idinstanceslabels').value);
                     }
 
                 if ("proximity" in conf) {
@@ -754,11 +762,26 @@ function GraphFromFeatures() {
                         if (conf["layout"] == "fo" && Object.keys(ds["layoutfeature"]).length > 0) {
                             self.layoutfeatures = new chart_force(VertexColorF, EdgeColorF, self, "#vis", -10, inargms);
                         }
+                        else if (conf["layout"] == "cb" && Object.keys(ds["layoutfeature"]).length > 0) {
+                            self.layoutfeatures = new chart_circularbundle_gff("#vis", self, VertexColorF, EdgeColorF);
+                        }
                         else if (conf["layout"] == "sb" && Object.keys(ds["layoutfeature"]).length > 0) {
                             self.layoutfeatures = new chart_sunburst("#vis", VertexColorF, self, inargms);
                         }
                         else if (conf["layout"] == "pk") {
                             self.layoutfeatures = new chart_circlepack("#vis", self, VertexColorF);
+                        }
+                        else if (conf["layout"] == "hm") {
+                            self.layoutfeatures = new chart_feature_heatmap("#vis", self, VertexColorF, EdgeColorF);
+                        }
+                        else if (conf["layout"] == "cm") {
+                            self.layoutfeatures = new chart_feature_community("#vis", self, VertexColorF, EdgeColorF);
+                        }
+                        else if (conf["layout"] == "bp") {
+                            self.layoutfeatures = new chart_bipartite("#vis", self, VertexColorF);
+                        }
+                        else if (conf["layout"] == "up") {
+                            self.layoutfeatures = new chart_upset("#vis", self, VertexColorF);
                         }
                         gelem('edgeslider').value = 0;
                         self.edgeslider = 0;
@@ -805,11 +828,9 @@ function GraphFromFeatures() {
                     idcollabel = isNaN(num) ? 0 : num;
                     console.log("idcollabel", idcollabel);
                     gelem('idinstanceslabels').selectedIndex = idcollabel;
-                    self.makeInstancesLabels(idcollabel);
                 }
                 else{
                     gelem('idinstanceslabels').selectedIndex = 0;
-                    self.makeInstancesLabels(gelem('idinstanceslabels').value);
                 }
 
 
@@ -922,6 +943,10 @@ function GraphFromFeatures() {
         self.layoutinstance = null;
 
         self.datafileselected = filename;
+        self.dataload = [];
+        self.dataloadfile = "";
+        self.dataloadcallbacks = [];
+        self.isloadingcsv = false;
         self.getdatasetname();
 
         /*
@@ -1175,11 +1200,31 @@ function GraphFromFeatures() {
     };
 
     this.loadfilecsv = function (callback) {
+        if (self.dataloadfile == self.datafileselected && self.dataload && self.dataload.length > 0) {
+            if (callback) {
+                callback(self.dataload);
+            }
+            return;
+        }
+
+        if (callback) {
+            self.dataloadcallbacks.push(callback);
+        }
+
+        if (self.isloadingcsv) {
+            return;
+        }
+
+        self.isloadingcsv = true;
         //d3.csv("http://localhost:8888/data/"+datafileselected+"/transform.csv", function(datai) {
         d3.csv("./data/" + self.datafileselected + "/transform.csv", function (datai) {
             self.dataload = datai;
-            if (callback) {
-                callback(datai);
+            self.dataloadfile = self.datafileselected;
+            self.isloadingcsv = false;
+            var callbacks = self.dataloadcallbacks.slice();
+            self.dataloadcallbacks = [];
+            for (var i = 0; i < callbacks.length; ++i) {
+                callbacks[i](datai);
             }
         });
     };
@@ -1265,11 +1310,8 @@ function GraphFromFeatures() {
         var ob = new ServiceData("get unselected features");
         ob.in.argms["type"] = 22;
         ob.in.argms["file"] = self.datafileselected;
-        //console.log("ob.in", ob.in);
         ob.event = function () {
-            //self.USFOBJ.unselectedfeatures = this.ou["response"];
-            //console.log("zzzzthis.ou", this.ou);
-            self.unselectedfeids = this.ou;
+            self.unselectedfeids = Array.isArray(this.ou) ? this.ou : [];
             self.USFOBJ.init();
             self.USFOBJ.load();
             self.USFOBJ.print();

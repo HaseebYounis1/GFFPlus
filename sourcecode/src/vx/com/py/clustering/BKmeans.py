@@ -9,8 +9,9 @@ import math
 import random
 
 import queue as Q
+import numpy as np
 
-from time import process_time 
+from time import process_time
 
 
 from vx.com.py.proximity.Proximity import *
@@ -74,26 +75,20 @@ class BKmeans:
     
     @staticmethod
     def computeMean(X, cluster):
-        n = len(X[0])
-        z = len(cluster)
-        mean = [0.0 for i in range(n)]
-
-        for i in cluster:
-            for j in range(n):
-                mean[j] += (X[i][j]/z)
-        print("mean",mean)
-        return mean
+        if not cluster:
+            return [0.0] * (len(X[0]) if X else 0)
+        arr = np.array([X[i] for i in cluster], dtype=float)
+        return arr.mean(axis=0).tolist()
 
     @staticmethod
-    def computeMedoid(X, cluster, centroids, proxtype):
-        mind = float('inf') 
-        imed = -1
-        for i in cluster:
-            d = Proximity.compute(X[i], centroids, proxtype)
-            if d<mind:
-                imed = i
-                mind = d
-        return imed
+    def computeMedoid(X, cluster, centroid, proxtype):
+        if not cluster:
+            return -1
+        arr = np.array([X[i] for i in cluster], dtype=float)
+        c = np.asarray(centroid, dtype=float)
+        diff = arr - c
+        dists = np.sqrt((diff * diff).sum(axis=1))
+        return cluster[int(np.argmin(dists))]
 
     @staticmethod
     def splitCluster(ci, X, clusters, centroids,

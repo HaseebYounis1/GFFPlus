@@ -75,7 +75,7 @@ class Query(BaseHandler):
                 # 0:ok; 1:working; 2:error
                 # lock dataset
                 status = Query.getStatus(app)
-                if status["statusopt"] in (0, 2):
+                if status["statusopt"] in (0, 2) and not Query.isprojectioncurrent(app):
                     Query.setStatus(app, 1);
                     t = threading.Thread(target=Query.processInstances, args=(app,))
                     t.start()
@@ -230,6 +230,33 @@ class Query(BaseHandler):
             print("error save projection", e)
             Query.setStatus(app, 2);
 
+    @staticmethod
+    def isprojectioncurrent(app):
+        if "file" not in app.argms or app.argms["file"] == "":
+            return False
+
+        idin = Query.converid(app.argms["file"])
+        filen = Settings.DATA_PATH+str(idin)+"/instance.obj"
+        if not os.path.exists(filen):
+            return False
+
+        keys = [
+            "projection",
+            "instanceproximity",
+            "target",
+            "intarget",
+            "featureselected",
+            "idinstanceslabels",
+        ]
+        re = list(DBX.find(DBS.DBGFF, "data", {"_id":idin}))
+        for row in re:
+            config = row.get("configinstance", {})
+            for key in keys:
+                if str(config.get(key, "")) != str(app.argms.get(key, "")):
+                    return False
+            return True
+        return False
+
 
 
 
@@ -305,29 +332,16 @@ class Query(BaseHandler):
     @staticmethod
     def loadatributenames(app):
         idin = Query.converid(app.argms["file"])
-
         columns = []
         da = list(DBX.find(DBS.DBGFF, "data", {"_id": idin}))
         for d in da:
-            if "fenames" in d and len(d["fenames"])>0:
-                columns = d["fenames"] 
+            if "fenames" in d and len(d["fenames"]) > 0:
+                columns = d["fenames"]
             else:
-                #f = open(Settings.DATA_PATH+app.argms["file"]+"/transform.csv", mode="r", encoding='utf-8-sig')
-                f = open(Settings.DATA_PATH+app.argms["file"]+"/transform.csv", mode="r", encoding='utf-8-sig')
-                columns = f.readline().split(",")
-                columns = [x.strip() for x in columns]
-                f.close()
-
-                columns_aux = []
-                for col in columns:
-                    #if col != "INDEXIDUID_":
-                    columns_aux.append(col)
-                columns = columns_aux
-
-
-                DBX.update( DBS.DBGFF, "data",
-                        {'_id': idin},
-                        {'fenames':columns})
+                with open(Settings.DATA_PATH + app.argms["file"] + "/transform.csv",
+                          encoding="utf-8-sig") as f:
+                    columns = [x.strip() for x in f.readline().split(",")]
+                DBX.update(DBS.DBGFF, "data", {"_id": idin}, {"fenames": columns})
         return columns
 
     @staticmethod
@@ -450,10 +464,11 @@ class Query(BaseHandler):
                     
         #save transform csv file
         df = pd.read_csv(filename_o, delimiter=",")
-        cat_columns = df.select_dtypes(['object']).columns
-        df[cat_columns] = df[cat_columns].astype('category')
-        for col in cat_columns:
-            df[col] = df[col].cat.codes
+        cat_columns = df.select_dtypes(["object"]).columns
+        if len(cat_columns):
+            df[cat_columns] = df[cat_columns].apply(
+                lambda col: col.astype("category").cat.codes
+            )
         df.to_csv(filename_t, index=False)
         
         del df
@@ -770,6 +785,10 @@ class Query(BaseHandler):
     def makeInstancesLabels(app):
         idin = Query.converid(app.argms["file"])
         colid = int(app.argms["idinstanceslabels"])
+        try:
+            maxlabels = int(app.argms.get("maxlabels", 5000))
+        except (TypeError, ValueError):
+            maxlabels = 5000
         #print("WWWWWWWWWWWWWWWWWWWWWWW")
         #print("colid", colid)
 
@@ -800,9 +819,13 @@ class Query(BaseHandler):
         f.close()           
         
 
-        df = pd.read_csv(   Settings.DATA_PATH+str(idin)+"/original.csv",
-                            delimiter=",",
-                            usecols=[colname])
+        read_kwargs = {
+            "delimiter": ",",
+            "usecols": [colname],
+        }
+        if maxlabels > 0:
+            read_kwargs["nrows"] = maxlabels
+        df = pd.read_csv(Settings.DATA_PATH+str(idin)+"/original.csv", **read_kwargs)
         #rest = {}
         #rest["instanceslabels"] = [ str(df[app.argms["colname"]][ind]) for ind in df.index]
         #rest["idinstanceslabels"] = [ str(row[0]) for row in df.itertuples(index=False) ]

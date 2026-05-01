@@ -179,6 +179,7 @@ function UnselectedFeatures(btnid, contid, selfgff) {
     };
     
     this.load = function(){
+        if (!Array.isArray(selfgff.unselectedfeids)) return;
         for(var id of selfgff.unselectedfeids){
             self.setChecked(id, 1);
         }

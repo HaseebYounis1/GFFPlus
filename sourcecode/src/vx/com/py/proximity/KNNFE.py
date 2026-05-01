@@ -1,48 +1,40 @@
-import math
-import queue as Q
-
+import numpy as np
 from time import process_time
 
 from vx.com.py.proximity.Proximity import *
 
 class KNNFE:
-    
+
     def __init__(self):
         pass
-    
+
     @staticmethod
     def execute(nneighbors, clusters, X, proxtype):
         start = process_time()
+        n = len(clusters)
+        if n == 0:
+            return []
 
-        n = len(clusters);
-        #pmat = PMatrix(n);
-        ne = [Q.PriorityQueue() for i in range(n)]
+        centroid_ids = [c.centroid for c in clusters]
+        cent_data = X._data[centroid_ids, :]  # (n_clusters, features)
+
+        # Vectorised pairwise Euclidean between centroids
+        sq = (cent_data ** 2).sum(axis=1)
+        dots = cent_data @ cent_data.T
+        dist_matrix = np.sqrt(np.maximum(sq[:, None] + sq[None, :] - 2.0 * dots, 0.0))
+
+        k = min(nneighbors, n - 1)
+        ner = []
         for i in range(n):
-            ci = clusters[i].centroid
-            for j in range(i+1, n):
-                cj = clusters[j].centroid
+            row = dist_matrix[i]
+            # argpartition gives cheapest k+1 indices (includes self)
+            idx = np.argpartition(row, min(k, n - 1))[:k + 1]
+            idx = idx[idx != i][:k]
+            idx = idx[np.argsort(row[idx])]
+            ner.append([[int(j), float(row[j])] for j in idx])
 
-                d = X.proximity_row_ij(ci, cj, proxtype)
-                # print("dddddddddddddddd",d)
-                ne[i].put((d, j))
-                ne[j].put((d, i))
-                # for c in range(X.cols()):
-                #     print (X.getValue(ci, c), X.getValue(cj, c), ci, cj);
-                # print("X")
-
-        ner = [ [] for i in range(n)]
-        for i in range(n):
-            q = ne[i]
-            while not q.empty():
-                d, j = q.get()
-                ner[i].append([j,d])
-                if len(ner[i])==nneighbors:
-                    break;
-        del ne
-        #print ("nernernernernernernernernernerner",ner, nneighbors)
         end = process_time()
-        print ("time KNNFE: {:.5f}".format(end-start))
-
+        print("time KNNFE: {:.5f}".format(end - start))
         return ner
 
 

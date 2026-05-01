@@ -45,6 +45,8 @@ from vx.com.px.dataset.dataio_pure import *
 ## Graph
 ########################################
 class Graph:
+    MAX_WHOLE_EDGES = 8000
+
     def __init__(self):
         self.data = {
                         "root":[],
@@ -108,6 +110,7 @@ class Graph:
         
         #target_id = X.columnindex(target)
         N = X.cols()
+        max_whole_edges = int(argms.get("maxwholeedges", Graph.MAX_WHOLE_EDGES))
         pm_t = X.proximitymatrix_cols(pmetric)
         prox_types = ProximityMatrix.POT
         coeffx = pm_t.getCoefficient()
@@ -134,8 +137,10 @@ class Graph:
 
             idmx = target_id
             if importance == "Pearson" or importance == "Correlation" :
-                for name, i in colsindexes.items():
-                    X.normalization_col(i, 1);
+                mu = X._data.mean(axis=0, keepdims=True)
+                sigma = X._data.std(axis=0, ddof=1, keepdims=True)
+                sigma = np.where(sigma < 1e-6, 1.0, sigma)
+                X._data = (X._data - mu) / sigma
 
                 minf_, maxf_ = float("inf"), -float("inf")
                 minfr_, maxfr_ = float("inf"), -float("inf")
@@ -183,24 +188,24 @@ class Graph:
 
 
             elif importance == "Extratrees":
-                #xcols = []
                 xidcols = []
                 for name, i in colsindexes.items():
                     if i != target_id:
-                        #xcols.append(name)
                         xidcols.append(i)
 
-                #yt, ymint, ymaxt = X.getcolumn(target)
                 yt, ymint, ymaxt = X.getcolumn_index(target_id)
-                
-                #XR = X.selectcolumns(xcols)
                 XR = X.selectcolumns_index(xidcols)
-                
-           
-                xt = np.array(XR.tolist())
+
+                xt = XR._data
                 yt = np.array(yt)
-                modelt = ExtraTreesClassifier(n_estimators=100, random_state=7)
-                modelt.fit(xt, yt)
+                modelt = ExtraTreesClassifier(n_estimators=50, random_state=7, n_jobs=-1)
+                n_rows = xt.shape[0]
+                if n_rows > 5000:
+                    rng = np.random.default_rng(42)
+                    idx = rng.choice(n_rows, 5000, replace=False)
+                    modelt.fit(xt[idx], yt[idx])
+                else:
+                    modelt.fit(xt, yt)
                 vls = []
                 impmi, impmx = float("inf"), -float("inf")
                 #for i in range(len(xcols)):
@@ -289,15 +294,18 @@ class Graph:
             cc = 0;
             while not Q.empty():
                 w, a = Q.get()
-                graph["whole"].append({ "source": a[0],
-                                        "target": a[1],
-                                        "weight": w,
-                                        #"category": 1
-                                        })
+                stored_edge = len(graph["whole"]) < max_whole_edges
+                if stored_edge:
+                    graph["whole"].append({ "source": a[0],
+                                            "target": a[1],
+                                            "weight": w,
+                                            #"category": 1
+                                            })
 
                 idx = int(w*(len(hist)-1))
                 hist[idx]["co"] += 1.0 
-                hist[idx]["id"].append(cc)
+                if stored_edge:
+                    hist[idx]["id"].append(cc)
                 cc += 1
 
             postprocessinghist(hist)
@@ -333,15 +341,12 @@ class GraphMST:
   
     def __init__(self,vertices): 
         self.V= vertices #No. of vertices 
-#        self.graph = [] # default dictionary  
-        self.graph = queue.PriorityQueue() # default dictionary  
+        self.graph = []
 
    
     # function to add an edge to graph 
     def addEdge(self,w,u,v): 
-#        self.graph.append([u,v,w]) 
-#        self.graph.put((-w, (u,v,w)))
-        self.graph.put((w, (u,v)))
+        self.graph.append((w, u, v))
   
     # A utility function to find set of an element i 
     # (uses path compression technique) 
@@ -394,20 +399,16 @@ class GraphMST:
             rank.append(0) 
 
 
-        #for elem in self.graph.queue:
-        #    print(elem)      
+        edges = sorted(self.graph, key=lambda item: item[0])
+        max_whole_edges = Graph.MAX_WHOLE_EDGES
 
         # Number of edges to be taken is equal to V-1 
-        while e < self.V -1 : 
+        for w, u, v in edges:
+            if e >= self.V - 1:
+                break
   
             # Step 2: Pick the smallest edge and increment  
                     # the index for next iteration 
-#            u,v,w =  self.graph[i] 
-#            axx =  self.graph.get()
-#            print("axxWWWWWWWWWWWWWWW", axx)
-#            axx =  self.graph.get()
-#            print("axxWWWWWWWWWWWWWWW", axx)
-            w, (u,v) =  self.graph.get()
             #print("size: ",len(self.graph.queue))
             i = i + 1
             x = self.find(parent, u) 
@@ -433,27 +434,31 @@ class GraphMST:
                 #print("w",w)
             # Else discard the edge 
             else:
+                stored_edge = len(graph2) < max_whole_edges
+                if stored_edge:
+                    graph2.append({ "source": u,
+                                    "target": v,
+                                    "weight": w,
+                                    #"category": 1
+                                    })
+                idx = int(w*(len(hist)-1))
+                hist[idx]["co"] += 1.0
+                if stored_edge:
+                    hist[idx]["id"].append(cc)
+                cc += 1 
+
+        for w, u, v in edges[i:]:
+            stored_edge = len(graph2) < max_whole_edges
+            if stored_edge:
                 graph2.append({ "source": u,
                                 "target": v,
                                 "weight": w,
                                 #"category": 1
                                 })
-                idx = int(w*(len(hist)-1))
-                hist[idx]["co"] += 1.0
-                hist[idx]["id"].append(cc)
-                cc += 1 
-
-        while not self.graph.empty():
-            w, (u,v) = self.graph.get()
-            #print("size2: ",len(self.graph.queue))
-            graph2.append({ "source": u,
-                            "target": v,
-                            "weight": w,
-                            #"category": 1
-                            })
             idx = int(w*(len(hist)-1))
             hist[idx]["co"] += 1.0 
-            hist[idx]["id"].append(cc)
+            if stored_edge:
+                hist[idx]["id"].append(cc)
             cc += 1
 
         postprocessinghist(hist)

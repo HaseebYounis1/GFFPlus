@@ -26,23 +26,18 @@ class GNNFE:
     
     @staticmethod
     def completing(neighbors):
+        # O(1) membership test per edge instead of O(k) linear scan
+        neighbor_sets = [set(k for k, _ in nbrs) for nbrs in neighbors]
         for i in range(len(neighbors)):
-            for j, w1 in neighbors[i]:
-                contain = False
-                for k, w2 in neighbors[j]:
-                    if k == i:
-                        contain = True
-                        break
-
-                if not contain:
-                    # newneighbors = [];
-
-                    # copying the previous neighbors
-                    # for k, w3 in newneighbors[j]:
-                    #     neighbors[j].append([k,w3]);
-                    
-                    neighbors[j].append([i,w1]);
-                    neighbors[i].append([j,w1]);
+            idx = 0
+            while idx < len(neighbors[i]):
+                j, w1 = neighbors[i][idx]
+                if i not in neighbor_sets[j]:
+                    neighbors[j].append([i, w1])
+                    neighbor_sets[j].add(i)
+                    neighbors[i].append([j, w1])
+                    neighbor_sets[i].add(j)
+                idx += 1
 
     @staticmethod
     def refining(neighbors, origaverage):

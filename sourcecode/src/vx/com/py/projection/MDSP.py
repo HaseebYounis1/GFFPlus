@@ -16,12 +16,19 @@ class MDSP(Projection):
         super().__init__(X,p)
 
     def execute(self):
-        #X = np.array(self.X)
-        X = self.X
-        mds = MDS(n_components=self.p, random_state=7)
+        X = np.asarray(self.X, dtype=float)
+        if X.shape[0] == 0:
+            return []
+        if X.shape[0] == 1:
+            return [[0.0, 0.0]]
+        mds = MDS(
+            n_components=self.p,
+            random_state=7,
+            n_init=1,
+            max_iter=120,
+            n_jobs=-1,
+            init="random",
+        )
         Xt = mds.fit_transform(X)
         X2 = Xt.tolist();
         return X2
-
-
-

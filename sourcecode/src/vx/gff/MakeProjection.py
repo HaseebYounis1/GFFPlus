@@ -24,6 +24,10 @@ from vx.com.py.matrix.CSVData import *
 
 
 class MakeProjection():
+    MAX_EXACT_TSNE_ROWS = 3000
+    MAX_EXACT_MDS_ROWS = 2000
+    MAX_EXACT_UMAP_ROWS = 20000
+
     def __init__(self):
         self.data = {"points":[],"tartegscolors":[],"tartegsnames":{}}
 
@@ -80,9 +84,7 @@ class MakeProjection():
             XR = XDF.selectcolumns_index(fenames)
         yt, ymint, ymaxt = XDF.getcolumn_index(targeti)
         X = XR.tolist()
-        #print("yt",yt)
         end = process_time()
-        print ("time read datamatrix fe time: {:.5f}".format(end-start))
 
         #y = dmat.sample(smp_cols=[target]).getData()
 
@@ -91,6 +93,15 @@ class MakeProjection():
         X2 = []
 
         metric = "cosine" if projprox == "DCosine" else "euclidean"
+        requested_mt = mt
+        if mt == "tsne" and N > MakeProjection.MAX_EXACT_TSNE_ROWS:
+            mt = "pca"
+        elif mt == "mds" and N > MakeProjection.MAX_EXACT_MDS_ROWS:
+            mt = "pca"
+        elif mt == "umap" and N > MakeProjection.MAX_EXACT_UMAP_ROWS:
+            mt = "pca"
+        self.data["projectionrequested"] = requested_mt
+        self.data["projectionused"] = mt
 
         if mt == "tsne":
             from vx.com.py.projection.TSNEM import TSNEM
@@ -98,10 +109,12 @@ class MakeProjection():
         elif mt == "umap":
             from vx.com.py.projection.UMAPP import UMAPP
             X2 = UMAPP(X, proxtype=metric).execute();
-        # elif mt == "mds":
-        #     X2 = MDSP(X).execute();
-        # elif mt == "pca":
-        #     X2 = PCAP(X).execute();
+        elif mt == "mds":
+            from vx.com.py.projection.MDSP import MDSP
+            X2 = MDSP(X).execute();
+        elif mt == "pca":
+            from vx.com.py.projection.PCAP import PCAP
+            X2 = PCAP(X).execute();
         # elif mt == "isomap":
         #     X2 = ISOMAPP(X).execute();
         # elif mt == "fastmap":

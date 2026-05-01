@@ -19,12 +19,17 @@ class PCAP(Projection):
         super().__init__(X, p)
 
     def execute(self):
-        X = self.X
-        #X = np.array(self.X)
+        X = np.asarray(self.X, dtype=float)
+        if X.shape[0] == 0:
+            return []
+        if X.shape[0] == 1:
+            return [[0.0, 0.0]]
 
-        pca = PCA(n_components = self.p,svd_solver = 'randomized')
+        components = min(self.p, X.shape[0], X.shape[1])
+        pca = PCA(n_components=components, svd_solver='randomized', random_state=7)
         pca.fit(X)
         X2 = pca.transform(X)
-        print(X2)
-        return X2
+        if components == 1:
+            X2 = np.column_stack([X2[:, 0], np.zeros(X2.shape[0])])
+        return X2.tolist()
         

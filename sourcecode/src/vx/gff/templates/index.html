@@ -35,6 +35,10 @@
 <script src="./lib/chart_circularhist.js"></script>
 <script src="./lib/chart_histogram.js"></script>
 <script src="./lib/chart_circlepack.js"></script>
+<script src="./lib/chart_upset.js"></script>
+<script src="./lib/chart_feature_heatmap.js"></script>
+<script src="./lib/chart_feature_community.js"></script>
+<script src="./lib/chart_bipartite.js"></script>
 <script src="./lib/chart_circularbundle.js"></script>
 <script src="./lib/chart_sunburst.js"></script>
 <script src="./lib/chart_force.js"></script>
@@ -525,9 +529,13 @@
                                                             style="max-width: 70px; min-width: 70px"
                                                         >
                                                             <option value="fo">Force</option>
-                                                            <!-- <option value="cb">Circular</option> -->
+                                                            <option value="cb">Bundle</option>
                                                             <option value="sb">Sunburst</option>
                                                             <option value="pk">Pack</option>
+                                                            <option value="hm">Heatmap</option>
+                                                            <option value="cm">Community</option>
+                                                            <option value="bp">Bipartite</option>
+                                                            <option value="up">UpSet</option>
                                                         </select>
                                                     </td>
                                                     <td>
@@ -1178,12 +1186,12 @@
                                                             >
                                                                 <!--<option value="simple" selected>Correlation</option>-->
                                                                 <option value="simple">Pair</option>
-                                                                <option value="tsne" selected>t-SNE</option>
+                                                                <option value="pca" selected>PCA</option>
+                                                                <option value="tsne">t-SNE</option>
                                                                 <option value="umap">UMAP</option>
-                                                                <!-- <option value="mds">MDS</option>
-                                                                <option value="isomap">ISOMAP</option>
-                                                                <option value="fastmap">FASTMAP</option>
-                                                                <option value="pca">PCA</option> -->
+                                                                <option value="mds">MDS</option>
+                                                                <!-- <option value="isomap">ISOMAP</option>
+                                                                <option value="fastmap">FASTMAP</option> -->
 
                                                                 <!-- <option value="lspmds">LSP-MDS</option>
 

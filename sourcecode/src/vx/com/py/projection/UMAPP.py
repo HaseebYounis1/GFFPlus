@@ -40,9 +40,10 @@ class UMAPP(Projection):
                     n_components=self.p,
                     metric=self.proxtype,
                     n_neighbors=n_neighbors,
-                    n_epochs=200,
-                    low_memory=False,
-                    random_state=7,
+                    n_epochs=120,
+                    low_memory=True,
+                    random_state=None,
+                    n_jobs=-1,
                 ).fit_transform(X)
                 return X2.tolist();
             except Exception as exc:

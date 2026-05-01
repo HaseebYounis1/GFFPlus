@@ -72,23 +72,11 @@ class BKmeansFE:
     
     @staticmethod
     def computeMean(X, cluster, twocentroids, itwo):
-        z = float(len(cluster))
-
-        twocentroids.fillrow(itwo, 0.0);
-        # me = [0.0 for i in range(X.cols())]
-        for i in cluster:
-            for c in range(X.cols()):
-                d = twocentroids.getValue(itwo, c) + (X.getValue(i,c)/z)
-                twocentroids.setValue(itwo, c, d)
-
-                # me[c] += (X.getValue(i,c)/z)
-                
-        # for c in range(X.cols()):
-        #     twocentroids.setValue(itwo, c, me[c])
-
-        # for c in range(X.cols()):
-        #    print (twocentroids.getValue(itwo, c));
-        # print("X")
+        if not cluster:
+            twocentroids.fillrow(itwo, 0.0)
+            return
+        mean = X._data[cluster, :].mean(axis=0)
+        twocentroids._data[itwo, :] = mean
         
 
     @staticmethod

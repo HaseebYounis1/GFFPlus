@@ -43,7 +43,7 @@ class Server(tornado.web.Application):
         settings = {
             "template_path":Settings.TEMPLATE_PATH,
             "static_path":Settings.STATIC_PATH,
-#            "debug":Settings.DEBUG,
+            "debug":Settings.DEBUG,
             "cookie_secret": Settings.COOKIE_SECRET,
         }
         tornado.web.Application.__init__(self, handlers, **settings)

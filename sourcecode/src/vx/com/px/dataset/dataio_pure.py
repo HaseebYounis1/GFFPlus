@@ -89,9 +89,13 @@ class DataMatrix:
         pm._mat = _pairwise_matrix(self._data, axis=0, pt=pm.pti)
         return pm
 
-    def proximitymatrix_cols(self, ptn="Euclidean"):
+    def proximitymatrix_cols(self, ptn="Euclidean", max_rows=5000):
         pm = ProximityMatrix(ptn=ptn)
-        pm._mat = _pairwise_matrix(self._data, axis=1, pt=pm.pti)
+        data = self._data
+        if data.shape[0] > max_rows:
+            idx = np.random.default_rng(42).choice(data.shape[0], max_rows, replace=False)
+            data = data[idx, :]
+        pm._mat = _pairwise_matrix(data, axis=1, pt=pm.pti)
         return pm
 
     def proximity_rows(self, i, j, pt):
@@ -251,30 +255,82 @@ def _normalize(values, pt):
 def _pairwise_matrix(data, axis, pt):
     vectors = data if axis == 0 else data.T
     n = vectors.shape[0]
-    matrix = np.zeros((n, n), dtype=float)
-    values = []
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            distance = _proximity(vectors[i], vectors[j], pt)
-            matrix[i, j] = distance
-            matrix[j, i] = distance
-            values.append(distance)
+    if n == 0:
+        return np.zeros((0, 0), dtype=float)
 
-    if not values:
+    matrix = _compute_pairwise(vectors, pt)
+    np.fill_diagonal(matrix, 0.0)
+
+    upper = matrix[np.triu_indices(n, k=1)]
+    if upper.size == 0:
         return matrix
 
-    minv = min(values)
-    maxv = max(values)
+    minv = float(upper.min())
+    maxv = float(upper.max())
     denom = EPS + (maxv - minv)
     coeff = ProximityMatrix.CEF[_pt_name(pt)]
-    for i in range(n):
-        for j in range(i + 1, n):
-            value = (matrix[i, j] - minv) / denom
-            if coeff == -1:
-                value = 1.0 - value
-            matrix[i, j] = value
-            matrix[j, i] = value
+    matrix = (matrix - minv) / denom
+    if coeff == -1:
+        matrix = 1.0 - matrix
+    np.fill_diagonal(matrix, 0.0)
+    return matrix
+
+
+def _compute_pairwise(vectors, pt):
+    if pt == 0:  # Euclidean
+        sq = (vectors ** 2).sum(axis=1)
+        dots = vectors @ vectors.T
+        return np.sqrt(np.maximum(sq[:, None] + sq[None, :] - 2.0 * dots, 0.0))
+
+    if pt == 5:  # Cosine similarity
+        norms = np.maximum(np.linalg.norm(vectors, axis=1, keepdims=True), EPS)
+        n = vectors / norms
+        return n @ n.T
+
+    if pt == 6:  # Pearson correlation
+        c = vectors - vectors.mean(axis=1, keepdims=True)
+        norms = np.maximum(np.linalg.norm(c, axis=1, keepdims=True), EPS)
+        n = c / norms
+        return n @ n.T
+
+    if pt == 7:  # Gaussian (RBF)
+        sq = (vectors ** 2).sum(axis=1)
+        dots = vectors @ vectors.T
+        sq_dists = np.maximum(sq[:, None] + sq[None, :] - 2.0 * dots, 0.0)
+        return np.exp(-sq_dists / 0.5)
+
+    if pt == 8:  # Sample correlation
+        d = float(vectors.shape[1])
+        s = vectors.sum(axis=1, keepdims=True)
+        s2 = (vectors ** 2).sum(axis=1, keepdims=True)
+        dots = vectors @ vectors.T
+        num = d * dots - s * s.T
+        var = np.maximum(d * s2 - s ** 2, 0.0)
+        return num / np.maximum(np.sqrt(var * var.T), EPS)
+
+    if pt == 9:  # DCosine
+        norms = np.maximum(np.linalg.norm(vectors, axis=1, keepdims=True), EPS)
+        n = vectors / norms
+        return 1.0 - (1.0 + n @ n.T) / 2.0
+
+    # pt=1 (Manhattan), pt=2 (Canberra), pt=3 (Chebyshev), pt=4 (Braycurtis)
+    try:
+        from scipy.spatial.distance import cdist
+        metric_map = {1: "cityblock", 2: "canberra", 3: "chebyshev", 4: "braycurtis"}
+        if pt in metric_map:
+            return cdist(vectors, vectors, metric=metric_map[pt])
+    except ImportError:
+        pass
+
+    # Pure Python fallback for any unhandled metric
+    nv = vectors.shape[0]
+    matrix = np.zeros((nv, nv), dtype=float)
+    for i in range(nv):
+        for j in range(i + 1, nv):
+            d = _proximity(vectors[i], vectors[j], pt)
+            matrix[i, j] = d
+            matrix[j, i] = d
     return matrix
 
 
