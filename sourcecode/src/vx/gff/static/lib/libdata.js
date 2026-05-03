@@ -361,11 +361,14 @@ function GraphFromFeatures() {
     this.getfeatureselected = function (){
         var featureselectedTrueIds = [];
         self.normalizeFeatureSelection();
+        var nodes = (self.datagff.layoutfeature && self.datagff.layoutfeature["graph"])
+                    ? self.datagff.layoutfeature["graph"].nodes : [];
         for(var i of self.featureselected){
-            label = self.getNode(i).label;
-            //tid = self.lfenamesindex[label];
-            tid = label;
-            if (self.USFOBJ.at(tid).value==0){
+            var node = nodes[i];
+            if (!node) continue;
+            var tid = node.label;
+            var entry = self.USFOBJ.at(tid);
+            if (entry && entry.value == 0){
                 featureselectedTrueIds.push(tid);
             }
         }
@@ -394,7 +397,7 @@ function GraphFromFeatures() {
         
         if (self.datafileselected != "" && self.unselectedfeids.length<(self.datagff.fenames.length-1)) {
             self.cleanfeatures();
-            var status = "making graphs from featuresxx";
+            var status = "making feature graph";
             
             var ob = new ServiceData(status);
             ob.in.argms["type"] = 0;
@@ -415,19 +418,16 @@ function GraphFromFeatures() {
             ob.in.argms["statusval"] = status;
             //console.log("ob.in", ob.in);
             ob.event = function () {
-                //ok
-                if(this.ou["statusopt"]==0){                
+                if(this.ou["statusopt"]==0){
                     self.dequeLoadFeatures();
                 }
-                //working
                 else if(this.ou["statusopt"]==1){
-                    //lockk
-                    //setTimeout(self.visFeatures, 5000);
                     self.dequeLoadFeatures();
                 }
-                //error
                 else if(this.ou["statusopt"]==2){
-                    console.log("error");
+                    gelem("topleft1").innerHTML = "Error building feature graph";
+                    gelem("topright1").innerHTML = "Check server log";
+                    console.error("feature graph error:", this.ou);
                 }
             };
             ob.start();
@@ -481,11 +481,12 @@ function GraphFromFeatures() {
                         self.dequeLoadInstances();
                     }
                     else if(this.ou["statusopt"]==1){
-                        //setTimeout(self.visInstnaces, 5000);
                         self.dequeLoadInstances();
                     }
                     else if(this.ou["statusopt"]==2){
-                        console.log("error");
+                        gelem("topleft2").innerHTML = "Error building projection";
+                        gelem("topright2").innerHTML = "Check server log";
+                        console.error("projection error:", this.ou);
                     }
                 };
                 ob.start();
@@ -1216,15 +1217,34 @@ function GraphFromFeatures() {
         }
 
         self.isloadingcsv = true;
-        //d3.csv("http://localhost:8888/data/"+datafileselected+"/transform.csv", function(datai) {
-        d3.csv("./data/" + self.datafileselected + "/transform.csv", function (datai) {
-            self.dataload = datai;
+
+        function _commitLoad(rows) {
+            self.dataload = rows || [];
             self.dataloadfile = self.datafileselected;
             self.isloadingcsv = false;
-            var callbacks = self.dataloadcallbacks.slice();
+            var cbs = self.dataloadcallbacks.slice();
             self.dataloadcallbacks = [];
-            for (var i = 0; i < callbacks.length; ++i) {
-                callbacks[i](datai);
+            for (var i = 0; i < cbs.length; ++i) { cbs[i](self.dataload); }
+        }
+
+        // Load the 5 000-row sample instead of the full file.
+        // On 404 (old dataset without sample.csv) ask the server to generate
+        // it (type=25), then retry once.
+        var sampleUrl = "./data/" + self.datafileselected + "/sample.csv";
+        d3.csv(sampleUrl, function (datai) {
+            if (datai) {
+                _commitLoad(datai);
+            } else {
+                // sample.csv missing — server generates it from transform.csv
+                var ob = new ServiceData("preparing data sample");
+                ob.in.argms["type"] = 25;
+                ob.in.argms["file"] = self.datafileselected;
+                ob.event = function () {
+                    d3.csv(sampleUrl, function (datai2) {
+                        _commitLoad(datai2);
+                    });
+                };
+                ob.start();
             }
         });
     };

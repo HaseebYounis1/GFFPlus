@@ -306,6 +306,181 @@ before `draw()` completes, both methods crash with
 
 ---
 
+## 15. `sourcecode/src/vx/gff/Server.py` — favicon direct handler
+
+### Problem
+`(r"/favicon.ico", RedirectHandler, {"url": "/img/icon.png"})` was returning
+404 intermittently due to Tornado redirect caching behaviour.
+
+### Fix
+Replaced with a `FaviconHandler(StaticFileHandler)` subclass that overrides
+`get()` to serve `icon.png` directly — no redirect chain that can fail.
+
+---
+
+## 16. `sourcecode/src/vx/gff/Query.py` — three separate bugs
+
+### 16a `saveprojection` KeyError
+`r["configfeature"]["ranking"]` and `["nodes"]` crashed with `KeyError` when
+the feature graph had not been built yet (e.g. first projection request on a
+fresh dataset). Changed both accesses to `.get("ranking", [])` /
+`.get("nodes", [])`.
+
+### 16b `makeInstancesLabels` unclosed file handle
+If `_featuresnames_index[colid]` raised `IndexError`, the file handle opened
+earlier was never closed. Replaced `open/close` with a `with` block.
+
+### 16c `savefile` — `sample.csv` pre-built at upload time
+The browser was loading the full `transform.csv` (168 MB for MNIST) via
+`d3.csv` — 30+ seconds of JavaScript CSV parsing. `savefile` now writes a
+`sample.csv` containing the first 5 000 rows (~14 MB) immediately after
+`transform.csv`. New type=25 endpoint `ensureSampleCsv` generates `sample.csv`
+on demand for datasets uploaded before this fix.
+
+---
+
+## 17. `sourcecode/src/vx/gff/static/lib/libdata.js` — four separate bugs
+
+### 17a `loadfilecsv` loading 168 MB CSV in browser
+Changed the `d3.csv` URL from `transform.csv` to `sample.csv`. On 404 (old
+dataset), calls type=25 to generate `sample.csv` then retries once. Browser
+CSV load drops from 30+ s to ~0.5–1 s.
+
+### 17b `getfeatureselected` TypeError on empty graph
+`self.getNode(i).label` threw `TypeError: Cannot read property 'label' of
+undefined` when `graph.nodes` was empty on first dataset open. Added a null
+guard that skips missing nodes.
+
+### 17c Silent failure on `statusopt=2`
+`visFeatures` and `visInstnaces` only called `console.log("error")` on server
+error. Now displays `"Error building feature graph"` / `"Error building
+projection"` in the UI status panels.
+
+### 17d MOPRO process name typo
+`"making graphs from featuresxx"` contained a stale debug suffix.
+Changed to `"making feature graph"`.
+
+---
+
+## 18. `sourcecode/src/vx/gff/graphtree/graphtree_pure.py` — four hot-path rewrites
+
+### 18a `DataMatrix` row-sampling at load time
+`make_graph` now calls `DataMatrix(filefe, unselectedfeids, max_rows=5000)`.
+For MNIST (168 MB CSV), only the first 5 000 rows are read from disk — the
+rest are never loaded. Requires the `max_rows` parameter added to
+`dataio_pure.DataMatrix._load_csv` (§19).
+
+### 18b Vectorised Pearson/Correlation target loop
+The loop `for name, i in colsindexes.items(): dr = X.proximity_cols(i, target_id, ...)`
+made N Python function calls (N=784 for MNIST), each operating on a
+5 000-element vector. Replaced with `_target_correlations(data, target_id,
+corr_type)` — a new helper that computes all N correlations in a single
+`data.T @ target` matrix multiply (~0.01 s vs ~30 s).
+
+### 18c Vectorised MST edge construction + pure-Python `_kruskal_mst`
+The nested `for i / for j` loop called `pm_t.getValue(i,j)` 306 936 times
+(Python `float()` call per element) then passed 306 936 objects to
+`GraphMST.addEdge`. Replaced with:
+- `np.triu_indices(N, k=1)` + `pm_t._mat[ii, jj]` — all weights in one numpy
+  fancy-index call.
+- `np.argsort(ww)` instead of Python `sorted()`.
+- New `_kruskal_mst(N, ww, src, dst, ...)` standalone function with iterative
+  path-halving union-find and pre-sorted input (skips the internal sort in the
+  old `KruskalMST`).
+- Same numpy approach applied to the NJ whole-edges loop.
+
+### 18d `feature_importances_` called 784 times in a loop
+The loop `for i in range(len(xidcols)): im = modelt.feature_importances_[i]`
+accessed the sklearn property 784 times. `feature_importances_` uses
+`Parallel(n_jobs=self.n_jobs)` internally — on Windows each access creates
+and tears down a multiprocessing pool. 784 × pool-create+teardown = 14 s of
+IPC overhead. Fixed by calling the property once outside the loop:
+`importances = modelt.feature_importances_`, then reading from the numpy array.
+Result: ExtraTrees step drops from 15 s to 0.83 s.
+
+### 18e NJ algorithm O(n³) cap
+Added: if `N > 300` and `algorithm == "nj"`, automatically switch to `"mst"`.
+Prevents indefinite hangs on wide datasets like MNIST (784 features × NJ ≈
+480 M iterations).
+
+---
+
+## 19. `sourcecode/src/vx/com/px/dataset/dataio_pure.py` — `DataMatrix` row cap
+
+### Problem
+`DataMatrix._load_csv` always read all rows from the CSV. For MNIST (60 000
+rows, 168 MB), this loaded ~440 MB into memory even though the feature graph
+only needs ~5 000 representative rows.
+
+### Fix
+Added `max_rows=None` to `DataMatrix.__init__` and `_load_csv`. When set,
+passed as `nrows=max_rows` to `pd.read_csv`, so pandas reads only the
+requested number of rows and never touches the rest of the file.
+`MakeProjection` still calls `DataMatrix(filefe)` without a cap so instance
+projections use the full dataset.
+
+---
+
+## 20. `sourcecode/src/vx/com/py/projection/MDSP.py` — MDS rewrite
+
+### Problem
+- Passed raw data to sklearn MDS, which recomputed the distance matrix
+  internally from scratch on every SMACOF iteration.
+- Default `eps=1e-9` (sklearn default) is far tighter than needed for 2D
+  visualisation, causing unnecessarily slow convergence.
+- `max_iter=120` risked premature stopping with the tight `eps`.
+
+### Fix
+- Precompute the full Euclidean distance matrix once with `X @ X.T` (single
+  BLAS call), then pass via `dissimilarity="precomputed"` — sklearn only
+  operates on the compact N×N matrix.
+- `eps=1e-3` — sufficient visual precision, converges ~3× faster.
+- `max_iter=300` — adequate headroom with the looser eps.
+- `normalized_stress="auto"` on sklearn ≥ 1.4, silent fallback on older installs.
+- `n_jobs=1` for the final SMACOF step. The app already falls back to PCA for
+  large MDS requests, and single-process MDS avoids Windows/joblib process
+  setup failures in restricted environments.
+
+---
+
+## 21. `DataMatrix` and `MakeProjection` — selected-column loading
+
+### Problem
+The instance projection path loaded the full `transform.csv` through
+`DataMatrix(filefe)` before selecting features. For MNIST this meant reading
+all 785 columns even when the user selected only a few pixels, then duplicating
+the selected matrix with `XR.tolist()`.
+
+### Fix
+- `DataMatrix` now stores numeric data as `float32` by default.
+- Added `selectedfeids` support so callers can load only a subset of original
+  feature ids while preserving the `trueids` mapping back to original columns.
+- `MakeProjection` loads only selected features plus the target label when a
+  subset is active, passes the NumPy array directly to projection backends, and
+  reads only the target column from `original.csv` for labels.
+- PCA/MDS/t-SNE/UMAP now handle empty or zero-variance selected matrices by
+  returning finite all-zero coordinates instead of warnings or crashes.
+- `LSPU` passes sampled NumPy rows directly to its sample projection instead of
+  converting through nested Python lists.
+
+### Benchmark on `dataset/MNIST-10000-784.csv`
+| Load path | Before | After |
+|---|---:|---:|
+| Full DataMatrix | ~62.8 MB (`float64`) | ~31.4 MB (`float32`) |
+| 5k feature-graph cap | ~31.4 MB | ~15.7 MB |
+| 2 features + label projection load | full 785 columns | ~120 KB |
+
+---
+
+## Final benchmark — MNIST (60 000 rows × 785 columns)
+
+| Step | Before | After |
+|---|---|---|
+| Feature graph — Correlation | ~60 s | **0.46 s** |
+| Feature graph — ExtraTrees | ~75 s | **0.83 s** |
+| PCA projection (60k rows) | — | **2.95 s** |
+| Browser CSV load | 30+ s (168 MB) | ~0.5–1 s (14 MB sample) |
+
 ## Test coverage
 
 `tests/test_optimizations.py` — 52 new tests across 8 test classes:
@@ -328,6 +503,6 @@ Together with the 9 pre-existing smoke tests, the full suite is **61 tests,
 all passing** in under 5 seconds.
 
 ```
-Ran 61 tests in 4.344s
+Ran 61 tests in 4.240s
 OK
 ```

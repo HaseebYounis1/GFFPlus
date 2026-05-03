@@ -26,11 +26,17 @@ class UMAPP(Projection):
         super().__init__(X,p)
 
     def execute(self):
-        X = np.asarray(self.X, dtype=float)
+        X = np.asarray(self.X, dtype=np.float32)
+        if X.ndim == 1:
+            X = X.reshape((-1, 1))
         if X.shape[0] == 0:
             return []
         if X.shape[0] == 1:
             return [[0.0, 0.0]]
+        if X.shape[1] == 0:
+            return np.zeros((X.shape[0], 2), dtype=float).tolist()
+        if not np.isfinite(X).all():
+            X = np.nan_to_num(X, copy=False)
 
         n_neighbors = min(15, max(2, X.shape[0] - 1))
         if sys.version_info < (3, 13):

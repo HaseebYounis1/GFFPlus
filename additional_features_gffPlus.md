@@ -32,6 +32,73 @@ This file tracks the lightweight extensions and performance work added on top of
   - Added `self.link = null` / `self.node = null` initialisers at construction
     and early-return guards at the top of both methods.
 
+- **favicon.ico returning 404**
+  - `RedirectHandler` for `/favicon.ico` returned 404 intermittently.
+  - Replaced with a `FaviconHandler(StaticFileHandler)` subclass that serves
+    `icon.png` directly without a redirect.
+
+- **`saveprojection` KeyError when feature graph not yet built**
+  - `r["configfeature"]["ranking"]` and `["nodes"]` crashed when a user
+    triggered instance projection before the feature graph existed.
+  - Changed to `.get("ranking", [])` / `.get("nodes", [])`.
+
+- **`makeInstancesLabels` unclosed file handle on IndexError**
+  - If `colid` was out of range the file opened for the CSV header was never
+    closed. Replaced `open/close` with a `with` block.
+
+- **NJ algorithm hangs indefinitely on wide datasets**
+  - Neighbour-Joining is O(n³). For MNIST (784 features) it never finishes.
+  - When N > 300 and algorithm is NJ, `make_graph` now silently falls back to
+    MST instead.
+
+- **`getfeatureselected` TypeError on first dataset open**
+  - `self.getNode(i).label` threw `TypeError` when `graph.nodes` was still
+    empty. Added a null guard that skips nodes not yet loaded.
+
+- **Silent failure on `statusopt=2`**
+  - When `processFeatures` or `processInstances` failed on the server, the
+    browser only called `console.log("error")` — no user-visible feedback.
+  - Now displays `"Error building feature graph"` / `"Error building
+    projection"` in the relevant status panels.
+
+- **MNIST feature graph taking 15+ seconds**
+  - Three compounded bottlenecks caused this:
+  
+  1. `feature_importances_` accessed 784 times in a loop. The sklearn property
+     uses `Parallel(n_jobs=-1)` internally; on Windows each access
+     created and tore down a process pool. 784 cycles = 14 s overhead.
+     Fixed by caching the property in a variable once outside the loop.
+  
+  2. `DataMatrix` loaded all 60 000 rows (168 MB) before any computation.
+     Added `max_rows=5000` to `DataMatrix`, so only 5 000 rows are read
+     from disk. Feature graph computation uses this capped loader; instance
+     projection still uses the full file.
+  
+  3. Pearson/Correlation target loop made 784 separate `proximity_cols`
+     function calls. Replaced with `_target_correlations` helper that
+     computes all correlations in a single `data.T @ target` matrix multiply.
+  
+  4. N² MST edge-construction loop called `pm_t.getValue(i,j)` 307 k times.
+     Replaced with `np.triu_indices` + numpy fancy indexing + a new
+     `_kruskal_mst` function that accepts a pre-sorted edge list.
+
+- **Browser loading 168 MB CSV via `d3.csv` (30+ seconds)**
+  - `loadfilecsv` requested the full `transform.csv` from the server, forcing
+    the browser to download and parse 168 MB of CSV.
+  - `Query.savefile` now creates a `sample.csv` (first 5 000 rows, ~14 MB)
+    at upload time. `loadfilecsv` loads `sample.csv` instead. A new type=25
+    server endpoint (`ensureSampleCsv`) generates `sample.csv` on demand for
+    datasets uploaded before this fix.
+  - Browser load time: 30+ s → ~0.5–1 s.
+
+- **MNIST projection loading all 785 columns for small selections**
+  - `MakeProjection` now asks `DataMatrix` to load only the selected feature
+    columns plus the target column when a feature subset is active.
+  - `DataMatrix` preserves original feature ids while storing numeric matrices
+    as `float32`, halving baseline matrix memory.
+  - Zero-variance selected pixels now produce a stable all-zero projection
+    instead of sklearn PCA warnings.
+
 ## Added
 
 - **UpSet feature layout**
@@ -85,6 +152,11 @@ This file tracks the lightweight extensions and performance work added on top of
 - **Duplicate projection skip**
   - Repeated projection requests with the same selected features, target, projection, and label configuration reuse the existing `instance.obj`.
   - This prevents unnecessary recomputation from repeated clicks or refreshes.
+
+- **Selected-column projection loading**
+  - Instance projection no longer reads every MNIST pixel column when the user
+    selected only a subset. The loader reads the active features plus the
+    target label and keeps the original id mapping for graph selections.
 
 - **Mouse-wheel zoom for new graph layouts**
   - Added zoom/pan support to Bundle, Heatmap, Community, Bipartite, and UpSet layouts.

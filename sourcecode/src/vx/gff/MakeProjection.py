@@ -11,6 +11,7 @@ import warnings
 from time import process_time
 
 import numpy as np
+import pandas as pd
 
 os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 1))
 warnings.filterwarnings("ignore", message="Could not find the number of physical cores.*")
@@ -35,10 +36,19 @@ class MakeProjection():
         mt = argms["projection"]
         projprox = argms["instanceproximity"]
 
-        featureselected = [int(index) for index in argms.get("featureselected", [])]
+        targeti = int(argms["target"])
+        featureselected = []
+        seen_features = set()
+        for index in argms.get("featureselected", []):
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                continue
+            if index != targeti and index not in seen_features:
+                featureselected.append(index)
+                seen_features.add(index)
         filefepath = Settings.DATA_PATH+argms["file"]+"/"
         filefe = filefepath+"transform.csv"
-        targeti = int(argms["target"])
 
         # df = pd.read_csv(filefe)
         # dmat = MData.openfilecsv(filefe)
@@ -61,34 +71,42 @@ class MakeProjection():
         #     X = dmat.sample(smp_cols=fenames).getData()
 
         start = process_time()
-        XDF = DataMatrix(filefe)
+        selected_load_ids = None
+        if featureselected:
+            selected_load_ids = featureselected + [targeti]
+        XDF = DataMatrix(filefe, selectedfeids=selected_load_ids)
         #target_index = XDF.columnindex(target)
 
         colsindexes = XDF.columnsindexes()
         colsnameslist = XDF.columns_index()
         trueids = XDF.trueids()
         
-        targeti_true = trueids[targeti]
+        targeti_true = trueids[targeti] if 0 <= targeti < len(trueids) else -1
+        if targeti_true < 0:
+            raise ValueError("Target column {} is not available in {}".format(targeti, filefe))
         target = colsnameslist[targeti_true]
 
-        target_index = targeti
         fenames = []
         for name, i in colsindexes.items():
-            if i != target_index:
+            if i != targeti_true:
                 fenames.append(i)
 
         XR = None
         if len(featureselected)>0:
-            XR = XDF.selectcolumns_index(featureselected)
+            local_features = [
+                trueids[index] for index in featureselected
+                if 0 <= index < len(trueids) and trueids[index] >= 0
+            ]
+            XR = XDF.selectcolumns_index(local_features)
         else:
             XR = XDF.selectcolumns_index(fenames)
-        yt, ymint, ymaxt = XDF.getcolumn_index(targeti)
-        X = XR.tolist()
+        yt = XDF.getcolumn_array(targeti_true, copy=True).astype(np.int64, copy=False)
+        X = XR._data
         end = process_time()
 
         #y = dmat.sample(smp_cols=[target]).getData()
 
-        N = len(X)
+        N = X.shape[0]
 
         X2 = []
 
@@ -140,26 +158,18 @@ class MakeProjection():
         #     X2 = LSP(X, smpprj=UMAPP(), smptype="clusteringmedoids").execute()
 
 
-        havzero = False
-        havzeroless = 1
-        for i in range(N):
-            yt[i] = int(yt[i])
-            if yt[i]==0:
-                havzero = True
-                havzeroless = 0
-                #break
+        havzeroless = 0 if np.any(yt == 0) else 1
+        yt = yt - havzeroless
 
-        for i in range(N):
-            yt[i] = yt[i]-havzeroless
-
-        targetsnames = {yi:yi for yi in yt}
+        targetsnames = {int(yi): int(yi) for yi in np.unique(yt)}
         ofile = filefepath+"original.csv"
         if os.path.isfile(ofile):
-            OD = CSVData(ofile)
-            target_y = OD.getcolumn(target)
-            for i in range(len(yt)):
-                targetsnames[yt[i]] = target_y[i]
-            del OD
+            try:
+                target_y = pd.read_csv(ofile, usecols=[target], dtype=str).iloc[:, 0].tolist()
+                for i in range(min(len(yt), len(target_y))):
+                    targetsnames[int(yt[i])] = target_y[i]
+            except Exception as exc:
+                print("Could not load original target labels:", exc)
 
         self.data["tartegsnames"] = targetsnames
         # cma = plt.cm.get_cmap('rainbow')
@@ -171,7 +181,12 @@ class MakeProjection():
 
 
         for i in range(N):
-            self.data["points"].append({"id": i,"x": float(X2[i][0]),"y": float(X2[i][1]),"t": (yt[i]) })
+            self.data["points"].append({
+                "id": i,
+                "x": float(X2[i][0]),
+                "y": float(X2[i][1]),
+                "t": int(yt[i]),
+            })
 
         del XDF
         del XR
@@ -182,6 +197,8 @@ class MakeProjection():
         data = np.asarray(X, dtype=float)
         if data.ndim != 2 or data.shape[0] == 0:
             return []
+        if data.shape[1] == 0:
+            return np.zeros((data.shape[0], 2), dtype=float).tolist()
         if data.shape[1] == 1:
             return np.column_stack([data[:, 0], np.zeros(data.shape[0])]).tolist()
         return data[:, :2].tolist()

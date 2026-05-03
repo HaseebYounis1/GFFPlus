@@ -8,60 +8,67 @@ import pandas as pd
 
 
 EPS = 1e-7
+DEFAULT_DTYPE = np.float32
 
 
 class DataMatrix:
-    def __init__(self, filecsv="None", unselectedfeids=None):
+    def __init__(self, filecsv="None", unselectedfeids=None, max_rows=None,
+                 selectedfeids=None, dtype=DEFAULT_DTYPE):
+        self._dtype = np.dtype(dtype)
         self._trueids = []
         self._feids = []
         self._featuresnames = {}
         self._featuresnames_index = []
-        self._data = np.zeros((0, 0), dtype=float)
+        self._data = np.zeros((0, 0), dtype=self._dtype)
 
         if unselectedfeids is None:
             unselectedfeids = []
 
         if filecsv != "None":
-            self._load_csv(filecsv, unselectedfeids)
+            self._load_csv(filecsv, unselectedfeids, max_rows, selectedfeids)
 
-    def _load_csv(self, filecsv, unselectedfeids):
+    def _load_csv(self, filecsv, unselectedfeids, max_rows=None, selectedfeids=None):
         header = pd.read_csv(filecsv, nrows=0, encoding="utf-8-sig").columns
         all_features = [str(col).strip() for col in header]
-        self._feids = list(range(len(all_features)))
-        self._trueids = list(range(len(all_features)))
-
-        if unselectedfeids:
-            selected = [1 for _ in all_features]
-            self._trueids = [-1 for _ in all_features]
-            for index in unselectedfeids:
-                selected[index] = 0
-
-            self._feids = []
-            self._featuresnames_index = []
-            shifted = 0
-            for index, keep in enumerate(selected):
-                if keep:
-                    self._feids.append(index)
-                    self._featuresnames_index.append(all_features[index])
-                    self._trueids[index] = shifted
-                    shifted += 1
+        n_features = len(all_features)
+        if selectedfeids is None:
+            candidate_ids = list(range(n_features))
         else:
-            self._featuresnames_index = all_features
+            candidate_ids = _clean_feature_ids(selectedfeids, n_features)
 
-        frame = pd.read_csv(
-            filecsv,
-            delimiter=",",
-            encoding="utf-8-sig",
-            usecols=self._feids,
-        )
-        self._data = frame.to_numpy(dtype=float, copy=True)
+        dropped = set(_clean_feature_ids(unselectedfeids, n_features))
+        self._feids = [index for index in candidate_ids if index not in dropped]
+        self._trueids = [-1 for _ in all_features]
+        for shifted, index in enumerate(self._feids):
+            self._trueids[index] = shifted
+        self._featuresnames_index = [all_features[index] for index in self._feids]
+
+        if not self._feids:
+            self._featuresnames = {}
+            self._data = np.zeros((0, 0), dtype=self._dtype)
+            return
+
+        read_kw = {"delimiter": ",", "encoding": "utf-8-sig", "usecols": self._feids}
+        if max_rows is not None:
+            read_kw["nrows"] = max_rows
+        frame = pd.read_csv(filecsv, **read_kw)
+
+        # pandas reads integer usecols in file order; restore the caller's
+        # requested order so original feature ids keep a stable local mapping.
+        loaded_set = set(self._feids)
+        loaded_ids = [index for index in range(n_features) if index in loaded_set]
+        if loaded_ids != self._feids:
+            reorder = {feature_id: pos for pos, feature_id in enumerate(loaded_ids)}
+            frame = frame.iloc[:, [reorder[feature_id] for feature_id in self._feids]]
+
+        self._data = frame.to_numpy(dtype=self._dtype, copy=True)
         self._featuresnames = {
             self._featuresnames_index[i].strip(): i
             for i in range(len(self._featuresnames_index))
         }
 
     def create(self, rows, cols):
-        self._data = np.zeros((rows, cols), dtype=float)
+        self._data = np.zeros((rows, cols), dtype=self._dtype)
 
     def trueids(self):
         return self._trueids
@@ -112,6 +119,7 @@ class DataMatrix:
 
     def transpose(self):
         other = DataMatrix()
+        other._dtype = self._dtype
         other._data = self._data.T.copy()
         other._featuresnames_index = ["c" + str(i) for i in range(self.rows())]
         other._featuresnames = {
@@ -127,20 +135,25 @@ class DataMatrix:
         return self.selectcolumns_index(indexes)
 
     def selectcolumns_index(self, featurescols_index):
-        indexes = list(featurescols_index)
+        indexes = [int(index) for index in featurescols_index]
         other = DataMatrix()
+        other._dtype = self._dtype
         other._data = self._data[:, indexes].copy()
         other._featuresnames_index = [self._featuresnames_index[i] for i in indexes]
         other._featuresnames = {
             other._featuresnames_index[i]: i
             for i in range(len(other._featuresnames_index))
         }
-        other._feids = indexes
-        other._trueids = list(range(len(indexes)))
+        other._feids = [self._feids[i] for i in indexes]
+        other._trueids = [-1 for _ in self._trueids]
+        for shifted, index in enumerate(other._feids):
+            if 0 <= index < len(other._trueids):
+                other._trueids[index] = shifted
         return other
 
     def selectrows(self, idrows):
         other = DataMatrix()
+        other._dtype = self._dtype
         other._data = self._data[list(idrows), :].copy()
         other._featuresnames = self._featuresnames.copy()
         other._featuresnames_index = list(self._featuresnames_index)
@@ -163,6 +176,10 @@ class DataMatrix:
     def getcolumn_index(self, c):
         values = self._data[:, c].tolist()
         return values, min(values), max(values)
+
+    def getcolumn_array(self, c, copy=True):
+        column = self._data[:, c]
+        return column.copy() if copy else column
 
     def setValue(self, i, j, v):
         self._data[i, j] = v
@@ -252,8 +269,23 @@ def _normalize(values, pt):
     return values
 
 
+def _clean_feature_ids(ids, n_features):
+    clean = []
+    seen = set()
+    for raw in ids or []:
+        try:
+            index = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= index < n_features and index not in seen:
+            clean.append(index)
+            seen.add(index)
+    return clean
+
+
 def _pairwise_matrix(data, axis, pt):
     vectors = data if axis == 0 else data.T
+    vectors = np.asarray(vectors, dtype=np.float64, order="C")
     n = vectors.shape[0]
 
     if n == 0:

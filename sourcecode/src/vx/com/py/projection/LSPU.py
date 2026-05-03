@@ -64,7 +64,7 @@ class LSPU(Projection):
         self.smp, self.clusterscentroids = Sampling.executeFE(self.X, self.smpsize, self.smptype, self.proxtype);
         self.Xsmp = self.X.selectrows(self.smp)
         #self.Xsmp = MData.samplex(self.X, smp_r=self.smp)
-        self.smpprj.setX(self.Xsmp.tolist());
+        self.smpprj.setX(self.Xsmp._data);
         self.Xsmp2D = self.smpprj.execute();
             
         end = process_time()

@@ -156,8 +156,11 @@ class Query(BaseHandler):
                 
                 obj = ujson.dumps(status);
                 
-            elif app.argms["type"]==24: 
-                obj = ujson.dumps(Query.opendataset(app)); 
+            elif app.argms["type"]==24:
+                obj = ujson.dumps(Query.opendataset(app));
+
+            elif app.argms["type"]==25:
+                obj = ujson.dumps(Query.ensureSampleCsv(app));
 
         #except Exception as e:
         #    print("Error: " + str(e))
@@ -470,7 +473,12 @@ class Query(BaseHandler):
                 lambda col: col.astype("category").cat.codes
             )
         df.to_csv(filename_t, index=False)
-        
+
+        # Pre-build a 5 000-row sample that the browser loads instead of the
+        # full file — eliminates multi-second d3.csv loads on large datasets.
+        sample_path = os.path.join(n_fname_dir, "sample.csv")
+        df.iloc[:5000].to_csv(sample_path, index=False)
+
         del df
         
     @staticmethod
@@ -532,9 +540,23 @@ class Query(BaseHandler):
         return result;
 
     @staticmethod
+    def ensureSampleCsv(app):
+        """Create sample.csv (5 000 rows) from transform.csv if it does not exist.
+        Called by the browser when sample.csv returns 404 (old datasets)."""
+        idin = Query.converid(app.argms["file"])
+        sample_path = os.path.join(Settings.DATA_PATH, str(idin), "sample.csv")
+        if not os.path.exists(sample_path):
+            transform_path = os.path.join(Settings.DATA_PATH, str(idin), "transform.csv")
+            if os.path.exists(transform_path):
+                df = pd.read_csv(transform_path, nrows=5000)
+                df.to_csv(sample_path, index=False)
+                del df
+        return {"ok": 1}
+
+    @staticmethod
     def opencsv(app):
         filefe = Settings.DATA_PATH+app.argms["file"]+"/transform.csv"
-        df = pd.read_csv(filefe)
+        pd.read_csv(filefe, nrows=1)
 
         return {"response":1};
 
@@ -722,8 +744,8 @@ class Query(BaseHandler):
                 
                 DBX.update(DBS.DBGFF, "data", {'_id':idin}, dataup)
 
-                app.argms["ranking"] = r["configfeature"]["ranking"];
-                app.argms["nodes"] = r["configfeature"]["nodes"];
+                app.argms["ranking"] = r["configfeature"].get("ranking", [])
+                app.argms["nodes"] = r["configfeature"].get("nodes", [])
 
             dataup = {
                         "versioninstance":Settings.VERSION,
@@ -810,13 +832,9 @@ class Query(BaseHandler):
 
                     
         #f = open(Settings.DATA_PATH+str(idin)+"/original.csv", mode="r",  encoding='utf-8-sig')
-        f = open(Settings.DATA_PATH+str(idin)+"/original.csv", mode="r",  encoding='utf-8-sig')
-        _featuresnames_index = f.readline().split(",")
-
-        _featuresnames_index = [x.strip() for x in _featuresnames_index]
-        #print("_featuresnames_index", _featuresnames_index);
-        colname = _featuresnames_index[colid] 
-        f.close()           
+        with open(Settings.DATA_PATH+str(idin)+"/original.csv", mode="r", encoding="utf-8-sig") as f:
+            _featuresnames_index = [x.strip() for x in f.readline().split(",")]
+        colname = _featuresnames_index[colid]
         
 
         read_kwargs = {

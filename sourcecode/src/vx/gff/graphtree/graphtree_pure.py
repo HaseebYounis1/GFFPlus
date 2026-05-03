@@ -41,6 +41,86 @@ import sys
 
 from vx.com.px.dataset.dataio_pure import *
 
+
+# ---------------------------------------------------------------------------
+# Fast helpers (replace Python loops with single numpy operations)
+# ---------------------------------------------------------------------------
+
+def _target_correlations(data, target_id, corr_type):
+    """Return correlation of every column in *data* with column *target_id*.
+
+    *data* must be z-score normalised already.
+    corr_type = 6 → Pearson,  corr_type = 8 → sample correlation.
+    Returns a 1-D array of length data.shape[1].
+    """
+    _EPS = 1e-7
+    tgt = data[:, target_id]
+
+    if corr_type == 6:                          # Pearson
+        dots  = data.T @ tgt                    # (n_cols,)
+        norms = np.sqrt((data ** 2).sum(axis=0))
+        return dots / np.maximum(norms * float(norms[target_id]), _EPS)
+
+    else:                                       # Sample correlation (pt=8)
+        n      = float(data.shape[0])
+        cross  = data.T @ tgt                   # (n_cols,)
+        sums   = data.sum(axis=0)               # (n_cols,)
+        sq     = (data ** 2).sum(axis=0)        # (n_cols,)
+        s_t    = float(sums[target_id])
+        sq_t   = float(sq[target_id])
+        num    = n * cross - sums * s_t
+        var_c  = np.maximum(n * sq  - sums ** 2, 0.0)
+        var_t  = max(n * sq_t - s_t ** 2, 0.0)
+        return num / np.maximum(np.sqrt(var_c * var_t), _EPS)
+
+
+def _kruskal_mst(N, ww, src, dst,
+                 tree_edges, whole_edges, root, hist, max_whole_edges):
+    """Kruskal's MST on a *pre-sorted* edge list.
+
+    ww / src / dst are plain Python lists (already sorted by weight).
+    Modifies tree_edges, whole_edges, root, hist in-place.
+    Path-halving union-find; no recursion.
+    """
+    parent = list(range(N))
+    rank   = [0] * N
+    n_hist = len(hist) - 1
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]      # path halving
+            i = parent[i]
+        return i
+
+    tree_count = 0
+    cc         = 0
+
+    for w, u, v in zip(ww, src, dst):
+        ru, rv = find(u), find(v)
+
+        if ru != rv and tree_count < N - 1:     # tree edge
+            tree_count += 1
+            if rank[ru] < rank[rv]:
+                ru, rv = rv, ru
+            parent[rv] = ru
+            if rank[ru] == rank[rv]:
+                rank[ru] += 1
+            tree_edges.append({"source": u, "target": v, "weight": w})
+            root[u][str(v)] = w
+            root[v][str(u)] = w
+        else:                                   # non-tree (whole) edge
+            stored = len(whole_edges) < max_whole_edges
+            if stored:
+                whole_edges.append({"source": u, "target": v, "weight": w})
+            idx = int(w * n_hist)
+            hist[idx]["co"] += 1.0
+            if stored:
+                hist[idx]["id"].append(cc)
+            cc += 1
+
+    postprocessinghist(hist)
+
+
 ########################################
 ## Graph
 ########################################
@@ -79,7 +159,7 @@ class Graph:
         pmetric = argms["proximity"]
         #inv1 = int(argms["p1"])
         #inv2 = int(argms["p2"])
-        targeti = argms["target"]
+        targeti = int(argms["target"])
         #target_id = argms["target"]
         algorithm = argms["algorithm"]
         importance = argms["relevance"]
@@ -96,7 +176,14 @@ class Graph:
 
         #print("featureselected",featureselected, importance)
         #print("unselectedfeids",unselectedfeids)
-        X = DataMatrix(filefe, unselectedfeids)
+        unselectedfeids = [
+            int(index) for index in unselectedfeids
+            if str(index).lstrip("-").isdigit() and int(index) != targeti
+        ]
+
+        # Load at most 5000 rows — sufficient for feature distances and
+        # target correlations; avoids reading 100+ MB CSVs in full.
+        X = DataMatrix(filefe, unselectedfeids, max_rows=5000)
         
         trueids = X.trueids()
         shifttrueids = X.shifttrueids()
@@ -105,12 +192,17 @@ class Graph:
         colsindexes = X.columnsindexes()
         #target_id = X.columnindex(targeti)
         
-        target_id = trueids[targeti]
+        target_id = trueids[targeti] if 0 <= targeti < len(trueids) else -1
+        if target_id < 0:
+            raise ValueError("Target column {} is not available in {}".format(targeti, filefe))
         #print("target_id, targeti", target_id, targeti)
         
         #target_id = X.columnindex(target)
         N = X.cols()
         max_whole_edges = int(argms.get("maxwholeedges", Graph.MAX_WHOLE_EDGES))
+        # NJ is O(n³): cap to prevent multi-minute hangs on wide datasets
+        if algorithm == "nj" and N > 300:
+            algorithm = "mst"
         pm_t = X.proximitymatrix_cols(pmetric)
         prox_types = ProximityMatrix.POT
         coeffx = pm_t.getCoefficient()
@@ -137,49 +229,40 @@ class Graph:
 
             idmx = target_id
             if importance == "Pearson" or importance == "Correlation" :
-                mu = X._data.mean(axis=0, keepdims=True)
+                # Z-score all columns in one broadcast pass
+                mu    = X._data.mean(axis=0, keepdims=True)
                 sigma = X._data.std(axis=0, ddof=1, keepdims=True)
                 sigma = np.where(sigma < 1e-6, 1.0, sigma)
                 X._data = (X._data - mu) / sigma
 
+                corrmeasure = prox_types["Pearson"] if importance == "Pearson" \
+                              else prox_types["Correlation"]
+
+                # Single matrix operation: correlations of all columns with target
+                all_corr = _target_correlations(X._data, target_id, corrmeasure)
+
                 minf_, maxf_ = float("inf"), -float("inf")
                 minfr_, maxfr_ = float("inf"), -float("inf")
 
-                corrmeasure = prox_types["Pearson"]
-                if importance == "Correlation":
-                    corrmeasure = prox_types["Correlation"]
-
                 for name, i in colsindexes.items():
-                    if i!=target_id:
-                        dr = X.proximity_cols(i, target_id, corrmeasure)
-                        d = abs(dr)
-
-                        minf_ = d if d<minf_ else minf_
-                        maxf_ = d if d>maxf_ else maxf_
-
-                        minfr_ = dr if dr<minfr_ else minfr_
-                        maxfr_ = dr if dr>maxfr_ else maxfr_
-
-                        # update value correlation 
+                    if i != target_id:
+                        dr = float(all_corr[i])
+                        d  = abs(dr)
+                        if d  < minf_:  minf_  = d
+                        if d  > maxf_:  maxf_  = d
+                        if dr < minfr_: minfr_ = dr
+                        if dr > maxfr_: maxfr_ = dr
                         node = graph["nodes"][i]
-                        
-                        #node["label"] = name;
-                        node["label"] = shifttrueids[i];
-                        
-                        node["weight"] = d;
-                        
+                        node["label"]  = shifttrueids[i]
+                        node["weight"] = d
                         self.data["ranking"][node["name"]] = dr
 
                 self.data["rankingmin"] = minfr_
                 self.data["rankingmax"] = maxfr_
 
-                #self.data["rankingrealmin"] = minfr_
-                #self.data["rankingrealmax"] = maxfr_
-
-                minmax = float(0.0000001+(maxf_-minf_))
+                minmax = float(0.0000001 + (maxf_ - minf_))
                 for g in graph["nodes"]:
-                    d = (g["weight"]-minf_)/(minmax)
-                    g["weight"] = d
+                    g["weight"] = (g["weight"] - minf_) / minmax
                     
                     #self.data["ranking"][g["name"]] = d
 
@@ -206,16 +289,14 @@ class Graph:
                     modelt.fit(xt[idx], yt[idx])
                 else:
                     modelt.fit(xt, yt)
-                vls = []
-                impmi, impmx = float("inf"), -float("inf")
-                #for i in range(len(xcols)):
-                for i in range(len(xidcols)):
-                    im = modelt.feature_importances_[i]
-                    vls.append(im)
-                    if im<impmi:
-                        impmi = im
-                    if im>impmx:
-                        impmx = im
+
+                # Access feature_importances_ ONCE — it spawns a parallel
+                # worker pool on every call; calling it inside a loop would
+                # create/teardown that pool N times (14+ s on Windows).
+                importances = modelt.feature_importances_
+                vls      = importances.tolist()
+                impmi    = float(importances.min())
+                impmx    = float(importances.max())
 
                 self.data["rankingmin"] = impmi
                 self.data["rankingmax"] = impmx
@@ -250,17 +331,22 @@ class Graph:
             #self.data["rankingreal"][target_id] = 1.0
 
         hist = [{"hi":0.0, "co":0.0, "id":[]} for i in range(400)]
-#        trees = {}
         if algorithm == "mst":
-            self.data["initvertex2"] = 0;
-            msT = GraphMST(N)
-            for i in range(N):
-                for j in range(i+1,N):
-                    w = pm_t.getValue(i, j)
-                    # print(w)
-                    msT.addEdge(w, i, j)
+            self.data["initvertex2"] = 0
 
-            mst = msT.KruskalMST(graph["links"], graph["whole"], root, hist)
+            # Extract all upper-triangle weights in one numpy operation,
+            # sort once — avoids N*(N-1)/2 Python getValue() calls.
+            ii, jj = np.triu_indices(N, k=1)
+            ww     = pm_t._mat[ii, jj]
+            ord_   = np.argsort(ww, kind="stable")
+
+            _kruskal_mst(
+                N,
+                ww[ord_].tolist(),
+                ii[ord_].tolist(),
+                jj[ord_].tolist(),
+                graph["links"], graph["whole"], root, hist, max_whole_edges,
+            )
 
 
         elif algorithm=="nj":
@@ -283,29 +369,24 @@ class Graph:
             nj = NeighborJoining()
             self.data["initvertex2"] = nj.execute(pm_t, N, root, graph) 
 
-            #add whole edges
-            Q = queue.PriorityQueue()
-            for i in range(N):
-                for j in range(i+1,N):
-                    if not str(j) in root[i]:
-                        w = pm_t.getValue(i, j)
-                        Q.put((w, (i,j)))
-
-            cc = 0;
-            while not Q.empty():
-                w, a = Q.get()
-                stored_edge = len(graph["whole"]) < max_whole_edges
-                if stored_edge:
-                    graph["whole"].append({ "source": a[0],
-                                            "target": a[1],
-                                            "weight": w,
-                                            #"category": 1
-                                            })
-
-                idx = int(w*(len(hist)-1))
-                hist[idx]["co"] += 1.0 
-                if stored_edge:
-                    hist[idx]["id"].append(cc)
+            # Whole edges for NJ: non-tree pairs sorted by weight (numpy)
+            ii_nj, jj_nj = np.triu_indices(N, k=1)
+            ww_nj  = pm_t._mat[ii_nj, jj_nj]
+            ord_nj = np.argsort(ww_nj, kind="stable")
+            cc = 0
+            n_hist = len(hist) - 1
+            for eidx in ord_nj:
+                u_nj, v_nj = int(ii_nj[eidx]), int(jj_nj[eidx])
+                if str(v_nj) in root[u_nj]:
+                    continue
+                w_nj  = float(ww_nj[eidx])
+                stored = len(graph["whole"]) < max_whole_edges
+                if stored:
+                    graph["whole"].append({"source": u_nj, "target": v_nj, "weight": w_nj})
+                hid = int(w_nj * n_hist)
+                hist[hid]["co"] += 1.0
+                if stored:
+                    hist[hid]["id"].append(cc)
                 cc += 1
 
             postprocessinghist(hist)
