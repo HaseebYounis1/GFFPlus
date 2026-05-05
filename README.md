@@ -18,12 +18,18 @@ Verify whether the following software is installed:
 * Please login with user: `localuser` and password: `gff`
 
 ## Optional XAI / ML environment
+The default local XAI pipeline is CPU-first and runs with the base
+`requirements.txt` stack. It uses sklearn ExtraTrees models to compute feature
+importance and permutation importance, writes `xai.obj` beside the existing GFF
+layout files, and does not send dataset rows to external APIs.
+
 Use Python 3.11 for the smoothest cross-platform path. Python 3.12 should also work for the current scientific stack, but 3.11 is the safer default for PyTorch, TensorFlow, SHAP, Captum, UMAP, and older research packages. Python 3.13 can run the base app, but UMAP uses a scikit-learn fallback because `umap-learn`/Numba is not a reliable Windows path there yet.
 
 Install the base app first:
 * `python -m pip install -r requirements.txt`
 
-Then install optional explainability libraries:
+Then install optional explainability libraries if you want SHAP summaries or
+future experimental explainers:
 * `python -m pip install -r requirements-xai.txt`
 
 For NVIDIA GPU acceleration with PyTorch on Windows or Linux:

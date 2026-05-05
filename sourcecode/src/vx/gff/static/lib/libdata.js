@@ -104,7 +104,10 @@ function GraphFromFeatures() {
                             ["layoutfeature","initvertex2"],
                             ["layoutfeature","tree"],
                             ["layoutfeature","treehi"],
-                            ["layoutfeature","edgehist"]
+                            ["layoutfeature","edgehist"],
+                            ["typexai"],
+                            ["versionxai"],
+                            ["layoutxai"]
                         ]
         },
 
@@ -222,6 +225,9 @@ function GraphFromFeatures() {
     this.featuresChecks = [];
     this.featuresChecks_count = 0;
     this.featureSelectionTimer = null;
+    this.xaiColorMode = "graph";
+    this.xaiSizeMode = "graph";
+    this.xaiThreshold = 0.0;
 
 /*     this.featuresChecks = [];
     this.featuresChecks_count = 0; */
@@ -388,6 +394,153 @@ function GraphFromFeatures() {
         }
         //console.log("WSDself.auxfeatureselectedf", self.auxfeatureselectedf);
         return rest;
+    };
+
+    this.hasXAI = function () {
+        return self.datagff && self.datagff.layoutxai &&
+            Array.isArray(self.datagff.layoutxai.features) &&
+            self.datagff.layoutxai.features.length > 0;
+    };
+
+    this.applyXAIAttributesToGraph = function (ds) {
+        ds = ds || self.datagff || {};
+        ds.layoutxai = ds.layoutxai || {};
+        if (!ds.layoutfeature || !ds.layoutfeature.graph || !Array.isArray(ds.layoutfeature.graph.nodes)) {
+            return;
+        }
+
+        var scores = {};
+        var features = Array.isArray(ds.layoutxai.features) ? ds.layoutxai.features : [];
+        for (var item of features) {
+            scores[String(item.id)] = item;
+        }
+
+        for (var node of ds.layoutfeature.graph.nodes) {
+            if (node.category != 0) {
+                continue;
+            }
+            var xai = scores[String(node.label)] || {};
+            node.xai_importance = parseFloat(xai.importance || 0.0);
+            node.xai_importance_norm = parseFloat(xai.importance_norm || 0.0);
+            node.xai_permutation = parseFloat(xai.permutation || 0.0);
+            node.xai_permutation_norm = parseFloat(xai.permutation_norm || 0.0);
+            node.xai_shap = parseFloat(xai.shap || 0.0);
+            node.xai_shap_norm = parseFloat(xai.shap_norm || 0.0);
+        }
+    };
+
+    this.getFeatureNodeMetric = function (node, channel) {
+        if (!node) {
+            return 0.0;
+        }
+        if (node.category == 1) {
+            return parseFloat(node.weight || 0.0);
+        }
+        var mode = channel == "size" ? self.xaiSizeMode : self.xaiColorMode;
+        if (mode == "xai_importance") {
+            return parseFloat(node.xai_importance_norm || 0.0);
+        }
+        return parseFloat(node.weight || 0.0);
+    };
+
+    this.getFeatureNodeTooltip = function (node, ranking) {
+        if (!node || node.category == 1) {
+            return "extra";
+        }
+        var name = self.datagff.fenames[node.label];
+        if (self.xaiColorMode == "xai_importance" || self.xaiSizeMode == "xai_importance") {
+            var xaiScore = parseFloat(node.xai_importance || 0.0).toFixed(6);
+            return name + ": XAI " + xaiScore;
+        }
+        return name + ":" + ranking[node.name];
+    };
+
+    this.refreshFeatureNodeStyles = function () {
+        if (self.layoutfeatures != null && self.layoutfeatures.applyNodeStyles) {
+            self.layoutfeatures.applyNodeStyles();
+        }
+    };
+
+    this.runXAI = function () {
+        if (self.datafileselected == "") {
+            return;
+        }
+        var ob = new ServiceData("running local XAI");
+        ob.in.argms["type"] = 26;
+        ob.in.argms["file"] = self.datafileselected;
+        ob.in.argms["target"] = parseInt(self.target);
+        ob.in.argms["xai_enable_shap"] = true;
+        ob.event = function () {
+            if (this.ou && (this.ou.status == "ok" || this.ou.status == "partial")) {
+                self.datagff.layoutxai = this.ou;
+                self.applyXAIAttributesToGraph(self.datagff);
+                self.refreshFeatureNodeStyles();
+                if (self.xaiThreshold > 0.0 && self.layoutfeatures != null) {
+                    self.layoutfeatures.selectbythreshold(self.xaiThreshold);
+                }
+                gelem("topleft1").innerHTML = "XAI: " + this.ou.model.type;
+                gelem("topright1").innerHTML = "Target: " + this.ou.target.name;
+            }
+            else {
+                var msg = this.ou && this.ou.message ? this.ou.message : "XAI failed";
+                gelem("topleft1").innerHTML = "XAI error";
+                gelem("topright1").innerHTML = msg;
+                console.error("xai error:", this.ou);
+            }
+        };
+        ob.start();
+    };
+
+    this.setXAIImportanceColorMode = function () {
+        if (!self.hasXAI()) {
+            self.xaiColorMode = "xai_importance";
+            self.runXAI();
+            return;
+        }
+        self.xaiColorMode = self.xaiColorMode == "xai_importance" ? "graph" : "xai_importance";
+        self.refreshFeatureNodeStyles();
+    };
+
+    this.setXAIImportanceSizeMode = function () {
+        if (!self.hasXAI()) {
+            self.xaiSizeMode = "xai_importance";
+            self.runXAI();
+            return;
+        }
+        self.xaiSizeMode = self.xaiSizeMode == "xai_importance" ? "graph" : "xai_importance";
+        self.refreshFeatureNodeStyles();
+    };
+
+    this.selectXAIThreshold = function (threshold) {
+        self.xaiThreshold = parseFloat(threshold || 0.0);
+        if (!self.hasXAI()) {
+            self.xaiColorMode = "xai_importance";
+            self.runXAI();
+            return;
+        }
+        self.xaiColorMode = "xai_importance";
+        if (self.layoutfeatures != null) {
+            self.layoutfeatures.selectbythreshold(self.xaiThreshold);
+        }
+    };
+
+    this.showSHAPSimilarityGraph = function () {
+        if (!self.hasXAI()) {
+            self.runXAI();
+            return;
+        }
+        var shap = self.datagff.layoutxai.shap || {};
+        var similarity = shap.similarity || {};
+        if (!similarity.available || !Array.isArray(similarity.links) || similarity.links.length == 0) {
+            gelem("topleft1").innerHTML = "SHAP graph unavailable";
+            gelem("topright1").innerHTML = shap.reason || "No SHAP similarity links";
+            return;
+        }
+        if (self.layoutfeatures != null && self.layoutfeatures.setSimilarityLinks) {
+            self.layoutfeatures.setSimilarityLinks(similarity.links);
+            gelem("topleft1").innerHTML = "SHAP similarity";
+            gelem("topright1").innerHTML = similarity.links.length + " links";
+        }
     };
 
     this.visFeatures = function () {
@@ -667,6 +820,8 @@ function GraphFromFeatures() {
         ds.layoutfeature.treehi = ds.layoutfeature.treehi || [];
         ds.layoutfeature.edgehist = ds.layoutfeature.edgehist || [];
         ds.layoutfeature.ranking = ds.layoutfeature.ranking || [];
+        ds.layoutxai = ds.layoutxai || {};
+        self.applyXAIAttributesToGraph(ds);
 
         if ("fenames" in ds) {
             strs = "";

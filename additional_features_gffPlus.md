@@ -129,6 +129,29 @@ This file tracks the lightweight extensions and performance work added on top of
   - Re-enabled **PCA** and **MDS** in the projection dropdown.
   - Hardened PCA/MDS handling for empty and tiny datasets.
 
+- **Local XAI feature scoring**
+  - Adds a CPU-first backend XAI pipeline that works on existing uploaded
+    `transform.csv` files.
+  - New query type `26` runs the pipeline and saves results as `xai.obj` beside
+    `feature.obj` and `instance.obj`.
+  - Uses lightweight sklearn ExtraTrees models by default:
+    `ExtraTreesClassifier` for categorical targets and `ExtraTreesRegressor`
+    for continuous targets.
+  - Computes model feature importance and permutation importance locally.
+  - Computes SHAP summaries and a SHAP similarity graph only when `shap` is
+    installed; otherwise SHAP is skipped and the core importance results still
+    return successfully.
+  - The JSON payload includes feature names, raw and normalised importance
+    scores, permutation scores, optional SHAP summaries, target metadata, model
+    type, adaptive CPU settings, and status.
+
+- **XAI feature graph controls**
+  - Added toolbar controls for running local XAI, colouring nodes by XAI
+    importance, sizing nodes by XAI importance, threshold-selecting important
+    features, and switching to a SHAP similarity graph when SHAP data exists.
+  - Existing feature relevance graph modes remain available; XAI is an
+    alternate node metric rather than a replacement for the original GFF graph.
+
 ## Performance And Lightweight Work
 
 - **Browser CSV caching**
@@ -171,6 +194,18 @@ This file tracks the lightweight extensions and performance work added on top of
   - UMAP is configured for lower-memory, parallel execution without the random-state warning.
   - MDS uses fewer initializations/iterations for exploratory speed while staying single-process on Windows.
   - Debug timing prints were removed from the normal projection path.
+
+- **Adaptive CPU mode for XAI**
+  - XAI automatically chooses training rows, number of trees, permutation rows,
+    permutation repeats, and SHAP rows from dataset width/row count and
+    available-memory signals when available.
+  - Defaults are deliberately CPU-safe and Windows-friendly:
+    `n_jobs=1`, bounded samples, and reduced permutation work on wide datasets.
+  - Users can override `xai_estimators`, `xai_train_rows`,
+    `xai_permutation_rows`, `xai_permutation_repeats`, `xai_shap_rows`, and
+    `xai_n_jobs` through the API for controlled experiments.
+  - Quantization is left as a future hook only; the current implementation uses
+    sklearn tree models, not local neural or LLM models.
 
 ## Planned
 
@@ -215,13 +250,14 @@ These methods preserve the central idea of the project: features are graph nodes
 The most useful AI layer for this project is not a chatbot pasted onto the UI. It should be an explainable feature-analysis assistant that produces scores, groups, and explanations that can be visualized as graph attributes.
 
 - **Model-based feature importance**
-  - Train a lightweight model using the selected target.
-  - Add importance scores from ExtraTrees, permutation importance, SHAP, or LIME.
-  - Visualize these scores as node color/size and allow threshold selection.
+  - Implemented for local sklearn ExtraTrees models.
+  - Adds model feature importance and permutation importance.
+  - Optional SHAP summaries are added only when the `shap` package is present.
+  - Visualizes XAI importance as node color/size and supports threshold selection.
 
 - **SHAP feature graph**
-  - Compute SHAP values per feature and per class.
-  - Create edges between features with similar SHAP contribution profiles.
+  - Implemented as an optional graph mode when SHAP values are available.
+  - Edges connect features with similar SHAP contribution profiles.
   - This gives a graph of features that behave similarly in the model, not only features that are statistically similar in raw data.
 
 - **Local explanation mode**
@@ -237,14 +273,23 @@ The most useful AI layer for this project is not a chatbot pasted onto the UI. I
   - Generate a short textual summary from computed metrics: important feature groups, redundant features, contradictory/opposite features, and target-correlated regions.
   - This can be implemented without sending private data outside the app by summarizing computed statistics locally.
 
-## Practical XAI Implementation Order
+## Practical XAI Implementation Status
 
-1. Add a backend XAI endpoint that trains a lightweight sklearn model on the target.
-2. Return feature importance, permutation importance, and optional SHAP values when `shap` is installed.
-3. Store XAI results beside `feature.obj` as `xai.obj`.
-4. Add an **XAI Importance** color mode for feature graph nodes.
-5. Add a **SHAP Similarity Graph** layout where edges connect features with similar explanation profiles.
-6. Add local/group explanation from selected projected instances back to highlighted graph nodes.
+Done:
+
+1. Backend XAI endpoint trains a lightweight sklearn model on the target.
+2. Returns feature importance, permutation importance, and optional SHAP values when `shap` is installed.
+3. Stores XAI results beside `feature.obj` as `xai.obj`.
+4. Adds **XAI Importance** color and size modes for feature graph nodes.
+5. Adds threshold filtering from XAI importance.
+6. Adds a **SHAP Similarity Graph** mode when SHAP explanation profiles exist.
+7. Adds adaptive CPU mode for sample sizes, trees, permutation repeats, SHAP sample size, and single-process Windows-safe execution.
+
+Next:
+
+1. Add local/group explanation from selected projected instances back to highlighted graph nodes.
+2. Add counterfactual feature suggestions for selected classes or clusters.
+3. Add local textual summaries from computed statistics without sending data to external services.
 
 ## Implemented Layout Codes
 

@@ -43,6 +43,23 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     self.fonceb = foncebi;
     self.ratio = 3;
 
+    self.nodeColorMetric = function (d) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(d, "color") : d.weight;
+    };
+    self.nodeSizeMetric = function (d) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(d, "size") : d.weight;
+    };
+    self.nodeRadius = function (d) {
+        return (d.category == 1) ? 1.75 :
+            ((self.nodeSizeMetric(d) * self.ratio) + 3) +
+            (self.sizecirclemax * self.sizecircleper);
+    };
+    self.nodeTooltip = function (d) {
+        return selft.getFeatureNodeTooltip ?
+            selft.getFeatureNodeTooltip(d, self.ranking) :
+            selft.datagff.fenames[d.label] + ":" + self.ranking[d.name];
+    };
+
     self.radiallayout = layout_radial(self.treehi, self.width);
     self.isradiallayout = true;
 
@@ -216,14 +233,14 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         self.node = self.node.enter().append("circle")
             .attr("class", "node")
             .attr("r", function (d) {
-                return (d.category == 1) ? 1.75 : ((d.weight * (self.ratio)) + 3) + (self.sizecirclemax * self.sizecircleper);
+                return self.nodeRadius(d);
             })
             .style('stroke', 'white')
             .style('stroke-width', function (d) {
                 return (d.category == 1) ? 0 : 0.75;
             })
             .style("fill", function (d) {
-                return (d.category == 1) ? '#ccc' : self.vertexcolorf(d.weight);
+                return (d.category == 1) ? '#ccc' : self.vertexcolorf(self.nodeColorMetric(d));
             })
             .call(d3.drag()
                 .on("start", function (d, i) {
@@ -256,7 +273,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
                     selft.setToolpiltex(
                         d3.event.pageX,
                         d3.event.pageY,
-                        selft.datagff.fenames[d.label] + ":" + self.ranking[d.name]
+                        self.nodeTooltip(d)
                         );
                 }
 
@@ -305,7 +322,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         var selectionBArray = self.svgw.selectAll("circle").nodes();
         self.node
         .style("fill", function (d) {
-            return (d.category == 1) ? '#ccc' : self.vertexcolorf(d.weight);
+            return (d.category == 1) ? '#ccc' : self.vertexcolorf(self.nodeColorMetric(d));
         })
         .style("stroke", function (d) {
             return (d.category == 1) ? '#ccc' : "#fff";
@@ -323,16 +340,21 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         self.sizecircleper = pct;
         self.node
             .attr("r", function (d) {
-                return (d.category == 1) ? 1.75 : ((d.weight * (self.ratio)) + 3) + (self.sizecirclemax * self.sizecircleper);
+                return self.nodeRadius(d);
             });
+    };
+
+    this.applyNodeStyles = function () {
+        self.updatecolors();
+        self.updatesizecircle(self.sizecircleper);
     };
 
     this.drawedges = function () {
         self.linksForce = d3.forceLink(self.graph.linkupdate)
             .distance(function (d) {
 
-                return ((self.ratio * 2) + (self.graph.nodes[d.source.index].weight + d.weight +
-                    self.graph.nodes[d.target.index].weight + d.weight)) + 2.25 + (self.sizecirclemax * self.sizecircleper) * 2.0;
+                return ((self.ratio * 2) + (self.nodeSizeMetric(self.graph.nodes[d.source.index]) + d.weight +
+                    self.nodeSizeMetric(self.graph.nodes[d.target.index]) + d.weight)) + 2.25 + (self.sizecirclemax * self.sizecircleper) * 2.0;
             });
 
         self.simulation
@@ -381,7 +403,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (i = 0; i < self.graph.nodes.length; ++i) {
             d = self.graph.nodes[i];
-            if (d.category == 0 && d.weight >= self.T1 && d.name != taindex) {
+            if (d.category == 0 && self.nodeColorMetric(d) >= self.T1 && d.name != taindex) {
                 selft.featureselected.push(d.name);
             }
         }
@@ -516,6 +538,44 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             self.tick();
             self.stopforce();
         }
+        self.isupdatebundling = true;
+    };
+
+    this.setSimilarityLinks = function (links) {
+        var indexByFeatureId = {};
+        for (var i = 0; i < self.graph.nodes.length; ++i) {
+            indexByFeatureId[String(self.graph.nodes[i].label)] = i;
+        }
+
+        self.graph["linkupdate"] = [];
+        for (var link of (links || [])) {
+            var source = indexByFeatureId[String(link.source)];
+            var target = indexByFeatureId[String(link.target)];
+            if (source === undefined || target === undefined || source == target) {
+                continue;
+            }
+            var similarity = parseFloat(link.weight || 0.0);
+            self.graph["linkupdate"].push({
+                "source": source,
+                "target": target,
+                "weight": Math.max(0.01, 1.0 - similarity),
+                "xai_similarity": similarity
+            });
+        }
+
+        self.stopforce();
+        self.drawedges();
+        self.tick();
+        self.stopforce();
+        self.isupdatebundling = true;
+    };
+
+    this.restoreGraphLinks = function () {
+        self.graph["linkupdate"] = self.graph.links.slice();
+        self.stopforce();
+        self.drawedges();
+        self.tick();
+        self.stopforce();
         self.isupdatebundling = true;
     };
 

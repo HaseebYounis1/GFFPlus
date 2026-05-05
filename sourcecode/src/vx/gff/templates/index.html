@@ -573,6 +573,57 @@
                                                     </td>
                                                     <td style="width: 100%; text-align: right;">
                                                         <p class="bs-component" style="margin: 0; padding: 0;">
+                                                            <a href="#" class="btn btn-info btn-sm"
+                                                                onclick="
+                                                                    GFFOBJ.runXAI();
+                                                                "
+                                                                title="Run local XAI"
+                                                                style="margin-right: 2px;"
+                                                            >
+                                                                <i class="fa fa-brain fa-lg"
+                                                                   style="padding: 0;margin: 0"
+                                                                   ></i>
+                                                            </a>
+                                                            <a href="#" class="btn btn-secondary btn-sm"
+                                                                onclick="
+                                                                    GFFOBJ.setXAIImportanceColorMode();
+                                                                "
+                                                                title="XAI Importance node color"
+                                                                style="margin-right: 2px;"
+                                                            >
+                                                                <i class="fa fa-palette fa-lg"
+                                                                   style="padding: 0;margin: 0"
+                                                                   ></i>
+                                                            </a>
+                                                            <a href="#" class="btn btn-secondary btn-sm"
+                                                                onclick="
+                                                                    GFFOBJ.setXAIImportanceSizeMode();
+                                                                "
+                                                                title="XAI Importance node size"
+                                                                style="margin-right: 2px;"
+                                                            >
+                                                                <i class="fa fa-expand-alt fa-lg"
+                                                                   style="padding: 0;margin: 0"
+                                                                   ></i>
+                                                            </a>
+                                                            <a href="#" class="btn btn-dark btn-sm"
+                                                                onclick="
+                                                                    GFFOBJ.showSHAPSimilarityGraph();
+                                                                "
+                                                                title="SHAP similarity graph"
+                                                                style="margin-right: 2px;"
+                                                            >
+                                                                <i class="fa fa-project-diagram fa-lg"
+                                                                   style="padding: 0;margin: 0"
+                                                                   ></i>
+                                                            </a>
+                                                            <input id="xaithreshold" type="range" min="0" max="100" value="0"
+                                                                title="XAI Importance threshold"
+                                                                style="width: 120px; vertical-align: middle; margin-right: 6px;"
+                                                                onchange="
+                                                                    GFFOBJ.selectXAIThreshold(this.value/100.0);
+                                                                "
+                                                            >
                                                             <a href="#" class="btn btn-primary btn-sm"
                                                                 onclick="
                                                                    //GFFOBJ.visFeatures();

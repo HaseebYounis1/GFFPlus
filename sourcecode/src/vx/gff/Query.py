@@ -36,6 +36,7 @@ from datetime import datetime, timedelta
 from vx.gff.Settings import *
 from vx.gff.BaseHandler import *
 from vx.gff.MakeProjection import *
+from vx.gff.XAI import XAIPipeline
 from vx.gff.graphtree.graphtree_pure import *
 from vx.gff.User import *
 
@@ -162,6 +163,9 @@ class Query(BaseHandler):
 
             elif app.argms["type"]==25:
                 obj = ujson.dumps(Query.ensureSampleCsv(app));
+
+            elif app.argms["type"]==26:
+                obj = ujson.dumps(Query.runXAI(app));
 
         #except Exception as e:
         #    print("Error: " + str(e))
@@ -555,6 +559,48 @@ class Query(BaseHandler):
         return {"ok": 1}
 
     @staticmethod
+    def runXAI(app):
+        """Run local CPU-first feature attribution and persist xai.obj."""
+        try:
+            feature_names = Query.loadatributenames(app)
+            unselected = Query.getUnselecteFeatures(app)
+            result = XAIPipeline().execute(
+                Settings.DATA_PATH,
+                app.argms,
+                feature_names=feature_names,
+                unselectedfeids=unselected,
+            )
+            result["created"] = Query.now()
+            Query.saveXAI(app, result)
+            return result
+        except Exception as e:
+            print("error running xai", e)
+            return {
+                "status": "error",
+                "message": str(e),
+                "target": {
+                    "id": int(app.argms.get("target", -1))
+                    if str(app.argms.get("target", "")).lstrip("-").isdigit()
+                    else -1,
+                    "name": "",
+                    "type": "",
+                },
+                "model": {},
+                "features": [],
+                "importance": [],
+                "permutation": {"values": [], "values_norm": [], "status": "error"},
+                "shap": {
+                    "available": False,
+                    "reason": "not computed",
+                    "values": [],
+                    "values_norm": [],
+                    "summary": [],
+                    "similarity": {"available": False, "links": []},
+                },
+                "settings": {"local_only": True},
+            }
+
+    @staticmethod
     def opencsv(app):
         filefe = Settings.DATA_PATH+app.argms["file"]+"/transform.csv"
         pd.read_csv(filefe, nrows=1)
@@ -784,6 +830,23 @@ class Query(BaseHandler):
 
         DBFile.writeFile(Settings.DATA_PATH+str(idin)+"/instance.obj", db)
 
+    @staticmethod
+    def saveXAI(app, db):
+        idin = Query.converid(app.argms["file"])
+        dataup = {
+            'versionxai': Settings.VERSION,
+            'typexai': 'xai',
+            'configxai': {
+                'target': app.argms.get('target', ''),
+                'model': db.get('model', {}),
+                'settings': db.get('settings', {}),
+            },
+            'layoutxai': 'xai.obj',
+            'dateupdate': Query.now(),
+        }
+        DBX.update(DBS.DBGFF, "data", {'_id': idin}, dataup)
+        DBFile.writeFile(Settings.DATA_PATH+str(idin)+"/xai.obj", db)
+
 
     @staticmethod
     def silhouette(app):
@@ -944,6 +1007,9 @@ class Query(BaseHandler):
                     # open features
                     filen = Settings.DATA_PATH+str(idin)+"/feature.obj" 
                     rs["layoutfeature"] = DBFile.openFile(filen)
+
+                    filen = Settings.DATA_PATH+str(idin)+"/xai.obj"
+                    rs["layoutxai"] = DBFile.openFile(filen)
 
 
                 elif colle=="instances":

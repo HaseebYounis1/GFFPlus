@@ -142,6 +142,57 @@ class RuntimeSmokeTests(unittest.TestCase):
         self.assertEqual(status["statusopt"], 0)
         self.assertEqual(status["statusval"], "")
 
+    def test_xai_query_writes_local_feature_scores(self):
+        MongoDB.insert(
+            None,
+            "data",
+            {
+                "_id": self.dataset_id,
+                "_id_user": "localuser",
+                "name": "Smoke",
+                "type": ".csv",
+                "fenames": ["a", "b", "c", "target"],
+                "statusopt": 0,
+                "statusval": "",
+                "featurecheck": [1, 1, 1, 1],
+            },
+        )
+        app = SimpleNamespace(
+            argms={
+                "file": self.dataset_id,
+                "target": 3,
+                "xai_enable_shap": 0,
+                "xai_estimators": 8,
+                "xai_train_rows": 4,
+                "xai_permutation_rows": 4,
+                "xai_permutation_repeats": 1,
+                "xai_n_jobs": 1,
+            }
+        )
+
+        result = Query.runXAI(app)
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["target"]["name"], "target")
+        self.assertIn(result["model"]["type"], ("ExtraTreesClassifier", "ExtraTreesRegressor"))
+        self.assertEqual(len(result["features"]), 3)
+        self.assertFalse(result["shap"]["available"])
+        self.assertTrue((Path(Settings.DATA_PATH) / self.dataset_id / "xai.obj").exists())
+
+        opened = Query.opendataset(
+            SimpleNamespace(
+                argms={
+                    "file": self.dataset_id,
+                    "data": {
+                        "collect": "features",
+                        "query": [["layoutxai", "features"]],
+                    },
+                }
+            )
+        )
+        self.assertEqual(opened["statusopt"], 0)
+        self.assertEqual(len(opened["response"][0]["response"]), 3)
+
     def test_dbfile_write_is_atomic_and_reloadable(self):
         path = Path(Settings.DATA_PATH) / self.dataset_id / "feature.obj"
         payload = {

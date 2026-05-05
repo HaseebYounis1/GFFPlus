@@ -1,6 +1,6 @@
 # GFF Optimization Changes
 
-All 61 tests pass after every change listed here. Results are numerically
+All 63 tests pass after every change listed here. Results are numerically
 identical to the original code unless noted otherwise.
 
 ---
@@ -472,6 +472,65 @@ the selected matrix with `XR.tolist()`.
 
 ---
 
+## 22. `sourcecode/src/vx/gff/XAI.py` and XAI query path
+
+### Problem
+The app had no local model-based explanation path. Feature relevance existed
+for graph construction, but there was no persisted artifact that exposed
+model feature importance, permutation importance, optional SHAP summaries, or
+graph attributes for XAI-driven node colour/size/threshold modes.
+
+The implementation also needed to stay CPU-first. Wide datasets such as MNIST
+make naive permutation or SHAP runs expensive, and sklearn/joblib worker setup
+can hit Windows permission errors in restricted environments.
+
+### Fix
+- Added a modular `XAIPipeline` that reads the uploaded dataset's
+  `transform.csv`, excludes the selected target from features, and trains an
+  ExtraTrees model locally.
+- Chooses `ExtraTreesClassifier` for categorical targets and
+  `ExtraTreesRegressor` for continuous targets.
+- Computes and returns:
+  - model `feature_importances_`,
+  - permutation importance,
+  - optional SHAP mean-absolute summaries when `shap` is installed,
+  - optional SHAP similarity links between features with similar explanation
+    profiles.
+- New `Query` type `26` runs XAI, writes `xai.obj`, and returns JSON with
+  status, target metadata, model metadata, feature scores, permutation scores,
+  optional SHAP payloads, and adaptive CPU settings.
+- `opendataset` now loads `layoutxai` with feature data, so the browser can
+  decorate existing graph nodes without changing the original `feature.obj`.
+- Default XAI execution is single-process (`n_jobs=1`) to avoid Windows/joblib
+  permission failures. If a caller opts into more jobs and worker setup fails,
+  the model fit retries with `n_jobs=1`.
+
+### Adaptive CPU defaults
+| Mode | Trigger | Trees | Train rows | Permutation rows | Repeats | SHAP rows |
+|---|---|---:|---:|---:|---:|---:|
+| standard | smaller datasets | 64 | 8 000 | 1 000 | 2 | 256 |
+| balanced | wide/medium datasets, e.g. MNIST 10k x 784 | 32 | 3 000 | 500 | 1 | 128 |
+| constrained | very wide/large or low memory | 24 | 1 500 | 300 | 1 | 96 |
+
+### Frontend
+- Added controls to run local XAI, switch node colour to XAI importance,
+  switch node size to XAI importance, threshold-select by XAI importance, and
+  show SHAP similarity links when present.
+- `chart_force` now routes node colour, size, tooltip, and threshold selection
+  through a node metric helper, preserving the original relevance graph mode.
+
+### MNIST smoke
+Default XAI on `MNIST-10000-784`:
+- target: `label`
+- task: classification
+- model: `ExtraTreesClassifier`
+- features: 784
+- adaptive mode: `balanced`
+- permutation status: `ok`
+- SHAP: skipped gracefully when `shap` is not installed
+
+---
+
 ## Final benchmark — MNIST (60 000 rows × 785 columns)
 
 | Step | Before | After |
@@ -480,10 +539,11 @@ the selected matrix with `XR.tolist()`.
 | Feature graph — ExtraTrees | ~75 s | **0.83 s** |
 | PCA projection (60k rows) | — | **2.95 s** |
 | Browser CSV load | 30+ s (168 MB) | ~0.5–1 s (14 MB sample) |
+| Local XAI (MNIST-10000-784) | not available | ~4–5 s, 784 features, SHAP optional |
 
 ## Test coverage
 
-`tests/test_optimizations.py` — 52 new tests across 8 test classes:
+`tests/test_optimizations.py` — 52 optimization tests across these areas:
 
 | Class | What it tests |
 |-------|---------------|
@@ -499,10 +559,10 @@ the selected matrix with `XR.tolist()`.
 | `TestFeatureGraphIntegration` | MST+Correlation/Pearson/Extratrees: node count, link count, tree present, treehi, edgehist length |
 | `TestProjectionPipeline` | PCA/MDS/t-SNE/simple: point count and finite values |
 
-Together with the 9 pre-existing smoke tests, the full suite is **61 tests,
-all passing** in under 5 seconds.
+Together with the 11 smoke tests, including the XAI query/persistence smoke
+test, the full suite is **63 tests, all passing** in under 5 seconds.
 
 ```
-Ran 61 tests in 4.240s
+Ran 63 tests in 1.6s
 OK
 ```
