@@ -1,5 +1,6 @@
 import sys
 import unittest
+from datetime import datetime, timedelta
 from shutil import rmtree
 from pathlib import Path
 from types import SimpleNamespace
@@ -116,6 +117,28 @@ class RuntimeSmokeTests(unittest.TestCase):
 
         Query.setStatus(SimpleNamespace(argms={"file": self.dataset_id}), 0)
         status = Query.getStatus(app)
+        self.assertEqual(status["statusopt"], 0)
+        self.assertEqual(status["statusval"], "")
+
+    def test_stale_working_status_is_cleared(self):
+        old_status_date = (
+            datetime.now() - timedelta(seconds=Query.STALE_WORKING_TIMEOUT_SECONDS + 60)
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        MongoDB.insert(
+            None,
+            "data",
+            {
+                "_id": self.dataset_id,
+                "name": "Smoke",
+                "statusopt": 1,
+                "statusval": "making projection from features selected",
+                "statusdate": old_status_date,
+            },
+        )
+        app = SimpleNamespace(argms={"file": self.dataset_id})
+
+        status = Query.getStatus(app)
+
         self.assertEqual(status["statusopt"], 0)
         self.assertEqual(status["statusval"], "")
 

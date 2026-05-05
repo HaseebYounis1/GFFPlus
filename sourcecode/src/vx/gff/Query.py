@@ -32,7 +32,7 @@ import zipfile
 import io
 import shutil
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
 from vx.gff.Settings import *
 from vx.gff.BaseHandler import *
 from vx.gff.MakeProjection import *
@@ -45,6 +45,7 @@ from vx.com.py.database.MongoDB import *
 
 
 class Query(BaseHandler):
+    STALE_WORKING_TIMEOUT_SECONDS = 15 * 60
 
     #Get RequestHandler
     def get(self):
@@ -650,12 +651,18 @@ class Query(BaseHandler):
         if "file" in app.argms and app.argms["file"]!="":
             idin = Query.converid(app.argms["file"])
             statusval = app.argms.get("statusval", "")
+            statusdate = Query.now()
             if k == 0:
                 statusval = ""
+                statusdate = ""
             
             DBX.update(DBS.DBGFF, "data",
                                     {'_id': idin},
-                                    {'statusopt': k, 'statusval': statusval})
+                                    {
+                                        'statusopt': k,
+                                        'statusval': statusval,
+                                        'statusdate': statusdate,
+                                    })
 
     @staticmethod
     def getStatus(app):
@@ -667,12 +674,31 @@ class Query(BaseHandler):
             if not "statusopt" in r or  not "statusval" in r:
                 DBX.update(DBS.DBGFF, "data",
                                         {'_id': idin},
-                                        {'statusopt':0, 'statusval':''})
+                                        {'statusopt':0, 'statusval':'', 'statusdate':''})
             else:
                 status["statusopt"] = r["statusopt"];
                 status["statusval"] = r["statusval"];
+                if Query.isStaleWorkingStatus(r):
+                    status["statusopt"] = 0
+                    status["statusval"] = ""
+                    DBX.update(DBS.DBGFF, "data",
+                               {'_id': idin},
+                               {'statusopt': 0, 'statusval': '', 'statusdate': ''})
 
         return status
+
+    @staticmethod
+    def isStaleWorkingStatus(row):
+        if int(row.get("statusopt", 0)) != 1:
+            return False
+        raw_date = row.get("statusdate") or row.get("dateupdate") or row.get("datecreate")
+        try:
+            started = datetime.strptime(str(raw_date), '%Y-%m-%d %H:%M:%S')
+        except (TypeError, ValueError):
+            return True
+        return datetime.now() - started > timedelta(
+            seconds=Query.STALE_WORKING_TIMEOUT_SECONDS
+        )
 
     @staticmethod
     def sharedataset(app):
