@@ -306,12 +306,16 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         //target node
         if (self.initv != -1) {
             var selectionBArray = self.svgw.selectAll(".node")["_groups"][0];
-            selectionBArray[self.initv].style.fill = "#666";
+            if (selectionBArray[self.initv]) {
+                selectionBArray[self.initv].style.fill = "#666";
+            }
         }
         //target node
         if (self.initv2 != -1) {
             var selectionBArray = self.svgw.selectAll(".node")["_groups"][0];
-            selectionBArray[self.initv2].style.stroke = "#72ab41";
+            if (selectionBArray[self.initv2]) {
+                selectionBArray[self.initv2].style.stroke = "#72ab41";
+            }
         }
 
         // initial radial layout
@@ -330,6 +334,9 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
 
         for (var i in selft.featureselected) {
             cir = selectionBArray[selft.featureselected[i]];
+            if (!cir) {
+                continue;
+            }
             cir.style.stroke = d3.color(cir.style.fill).darker();
             cir.style.strokeWidth = 2.25;
             cir.style.opacity = "1.0";

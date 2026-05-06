@@ -837,7 +837,7 @@ class Query(BaseHandler):
             'versionxai': Settings.VERSION,
             'typexai': 'xai',
             'configxai': {
-                'target': app.argms.get('target', ''),
+                'target': db.get('target', {}).get('id', app.argms.get('target', '')),
                 'model': db.get('model', {}),
                 'settings': db.get('settings', {}),
             },
@@ -991,6 +991,15 @@ class Query(BaseHandler):
         rf = []
         rs = {};
         status = Query.getStatus(app)
+        status_warning = ""
+        if status["statusopt"] == 2:
+            # Opening cached dataset artifacts is read-only. A previous feature or
+            # projection job may have failed, but existing feature.obj/instance.obj
+            # files should still render instead of leaving the browser loader stuck.
+            status_warning = status.get("statusval", "")
+            status["statusopt"] = 0
+            status["statusval"] = ""
+
         if status["statusopt"]==0:
             re = list(DBX.find(DBS.DBGFF, "data", {"_id":idin}))
             #print()
@@ -1029,6 +1038,8 @@ class Query(BaseHandler):
                     rf.append({"query":qrow, "response":aux})
 
         status["response"] = rf
+        if status_warning:
+            status["statuswarning"] = status_warning
         return status
 
 

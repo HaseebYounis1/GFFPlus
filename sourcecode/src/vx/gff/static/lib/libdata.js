@@ -402,6 +402,26 @@ function GraphFromFeatures() {
             self.datagff.layoutxai.features.length > 0;
     };
 
+    this.getTargetId = function () {
+        var target = parseInt(self.target, 10);
+        var targetElement = gelem("target");
+        if (isNaN(target) && targetElement) {
+            target = parseInt(targetElement.value, 10);
+        }
+        if (isNaN(target) && targetElement) {
+            target = parseInt(targetElement.selectedIndex, 10);
+        }
+        if (isNaN(target) || target < 0) {
+            var names = (self.datagff && Array.isArray(self.datagff.fenames)) ? self.datagff.fenames : [];
+            target = names.length > 0 ? names.length - 1 : 0;
+        }
+        self.target = target;
+        if (targetElement && target >= 0 && target < targetElement.options.length) {
+            targetElement.selectedIndex = target;
+        }
+        return target;
+    };
+
     this.applyXAIAttributesToGraph = function (ds) {
         ds = ds || self.datagff || {};
         ds.layoutxai = ds.layoutxai || {};
@@ -461,6 +481,62 @@ function GraphFromFeatures() {
         }
     };
 
+    this.setFeatureLayoutMode = function (layout) {
+        var layoutElement = gelem("layout");
+        if (layoutElement) {
+            layoutElement.value = layout;
+        }
+        self.datagff.configfeature = self.datagff.configfeature || {};
+        self.datagff.configfeature.layout = layout;
+    };
+
+    this.featureGraphHasNodes = function () {
+        var graph = self.datagff && self.datagff.layoutfeature && self.datagff.layoutfeature.graph
+            ? self.datagff.layoutfeature.graph : {};
+        return Array.isArray(graph.nodes) && graph.nodes.length > 0;
+    };
+
+    this.ensureXAICompatibleFeatureLayout = function () {
+        if (!self.featureGraphHasNodes()) {
+            self.visFeatures();
+            return false;
+        }
+        if (self.layoutfeatures != null && self.layoutfeatures.applyNodeStyles) {
+            return true;
+        }
+        self.setFeatureLayoutMode("fo");
+        self.processFeaturesResults(self.datagff);
+        return self.layoutfeatures != null && self.layoutfeatures.applyNodeStyles;
+    };
+
+    this.ensureSHAPCompatibleFeatureLayout = function () {
+        if (!self.featureGraphHasNodes()) {
+            self.visFeatures();
+            return false;
+        }
+        if (self.layoutfeatures != null && self.layoutfeatures.setSimilarityLinks) {
+            return true;
+        }
+        self.setFeatureLayoutMode("fo");
+        self.processFeaturesResults(self.datagff);
+        return self.layoutfeatures != null && self.layoutfeatures.setSimilarityLinks;
+    };
+
+    this.ensureFeatureGraphVisibleAfterXAI = function (preferXAIStyleLayout) {
+        if (preferXAIStyleLayout && self.ensureXAICompatibleFeatureLayout()) {
+            self.refreshFeatureNodeStyles();
+        }
+        else if (self.layoutfeatures != null) {
+            self.refreshFeatureNodeStyles();
+        }
+        else if (self.featureGraphHasNodes()) {
+            self.processFeaturesResults(self.datagff);
+        }
+        else {
+            self.visFeatures();
+        }
+    };
+
     this.runXAI = function () {
         if (self.datafileselected == "") {
             return;
@@ -468,14 +544,19 @@ function GraphFromFeatures() {
         var ob = new ServiceData("running local XAI");
         ob.in.argms["type"] = 26;
         ob.in.argms["file"] = self.datafileselected;
-        ob.in.argms["target"] = parseInt(self.target);
+        ob.in.argms["target"] = self.getTargetId();
         ob.in.argms["xai_enable_shap"] = true;
         ob.event = function () {
             if (this.ou && (this.ou.status == "ok" || this.ou.status == "partial")) {
                 self.datagff.layoutxai = this.ou;
                 self.applyXAIAttributesToGraph(self.datagff);
-                self.refreshFeatureNodeStyles();
-                if (self.xaiThreshold > 0.0 && self.layoutfeatures != null) {
+                var needsXAIStyleLayout = self.xaiColorMode == "xai_importance" ||
+                    self.xaiSizeMode == "xai_importance" ||
+                    self.xaiThreshold > 0.0;
+                self.ensureFeatureGraphVisibleAfterXAI(needsXAIStyleLayout);
+                if (self.xaiThreshold > 0.0 &&
+                        self.layoutfeatures != null &&
+                        self.layoutfeatures.selectbythreshold) {
                     self.layoutfeatures.selectbythreshold(self.xaiThreshold);
                 }
                 gelem("topleft1").innerHTML = "XAI: " + this.ou.model.type;
@@ -498,6 +579,9 @@ function GraphFromFeatures() {
             return;
         }
         self.xaiColorMode = self.xaiColorMode == "xai_importance" ? "graph" : "xai_importance";
+        if (self.xaiColorMode == "xai_importance") {
+            self.ensureXAICompatibleFeatureLayout();
+        }
         self.refreshFeatureNodeStyles();
     };
 
@@ -508,6 +592,9 @@ function GraphFromFeatures() {
             return;
         }
         self.xaiSizeMode = self.xaiSizeMode == "xai_importance" ? "graph" : "xai_importance";
+        if (self.xaiSizeMode == "xai_importance") {
+            self.ensureXAICompatibleFeatureLayout();
+        }
         self.refreshFeatureNodeStyles();
     };
 
@@ -519,7 +606,8 @@ function GraphFromFeatures() {
             return;
         }
         self.xaiColorMode = "xai_importance";
-        if (self.layoutfeatures != null) {
+        self.ensureXAICompatibleFeatureLayout();
+        if (self.layoutfeatures != null && self.layoutfeatures.selectbythreshold) {
             self.layoutfeatures.selectbythreshold(self.xaiThreshold);
         }
     };
@@ -536,10 +624,15 @@ function GraphFromFeatures() {
             gelem("topright1").innerHTML = shap.reason || "No SHAP similarity links";
             return;
         }
+        self.ensureSHAPCompatibleFeatureLayout();
         if (self.layoutfeatures != null && self.layoutfeatures.setSimilarityLinks) {
             self.layoutfeatures.setSimilarityLinks(similarity.links);
             gelem("topleft1").innerHTML = "SHAP similarity";
             gelem("topright1").innerHTML = similarity.links.length + " links";
+        }
+        else {
+            gelem("topleft1").innerHTML = "SHAP graph unavailable";
+            gelem("topright1").innerHTML = "Force layout could not be opened";
         }
     };
 
@@ -835,7 +928,7 @@ function GraphFromFeatures() {
             }
             gelem("target").innerHTML = strs;
             gelem("target").selectedIndex = Object.keys(self.lfenamesindex).length - 1;
-            self.target = parseInt(gelem("target").value);
+            self.target = self.getTargetId();
             
             gelem("idinstanceslabels").innerHTML = stro;
             gelem("idinstanceslabels").selectedIndex = 0;
@@ -850,9 +943,11 @@ function GraphFromFeatures() {
             if ("configfeature" in ds) {
                 conf = ds["configfeature"];
                 if ("target" in conf) {
-                    self.target = parseInt(conf["target"]);
-                    //gelem('target').value = conf["target"];
-                    gelem("target").selectedIndex = self.target;
+                    var configTarget = parseInt(conf["target"], 10);
+                    self.target = isNaN(configTarget) ? self.getTargetId() : configTarget;
+                    if (self.target >= 0 && self.target < gelem("target").options.length) {
+                        gelem("target").selectedIndex = self.target;
+                    }
                     
                 }
                     confins = ds["configinstance"] || {};
@@ -913,6 +1008,7 @@ function GraphFromFeatures() {
                         inargms = {};
                         inargms["infleft"] = 'topleft1';
                         inargms["infright"] = 'topright1';
+                        self.layoutfeatures = null;
                         //var data = ds["layoutfeature"];
                         //console.log("self.datagff.layoutfeature", self.datagff.layoutfeature);
                         if (conf["layout"] == "fo" && Object.keys(ds["layoutfeature"]).length > 0) {
@@ -939,18 +1035,34 @@ function GraphFromFeatures() {
                         else if (conf["layout"] == "up") {
                             self.layoutfeatures = new chart_upset("#vis", self, VertexColorF);
                         }
-                        gelem('edgeslider').value = 0;
-                        self.edgeslider = 0;
-                        
-                        chart_palettecolors(self.layoutfeatures.selectbythreshold,
-                            "seq1", 20, self.lwidth-20, VertexColorF);
+                        if (self.layoutfeatures != null) {
+                            gelem('edgeslider').value = 0;
+                            self.edgeslider = 0;
 
-                        chart_histogram(self.setToolpiltex,
-                            self.hideToolpiltex,
-                            self.layoutfeatures.updatelinkoption,
-                            "seqedgehist", self.lwidth, EdgeColorF, self.datagff.layoutfeature["edgehist"]);
+                            if (self.layoutfeatures.selectbythreshold) {
+                                chart_palettecolors(self.layoutfeatures.selectbythreshold,
+                                    "seq1", 20, self.lwidth-20, VertexColorF);
+                            }
+                            else {
+                                d3.select("#seq1").selectAll("svg").remove();
+                            }
 
-                        self.changeintarget();
+                            if (self.layoutfeatures.updatelinkoption) {
+                                chart_histogram(self.setToolpiltex,
+                                    self.hideToolpiltex,
+                                    self.layoutfeatures.updatelinkoption,
+                                    "seqedgehist", self.lwidth, EdgeColorF, self.datagff.layoutfeature["edgehist"]);
+                            }
+                            else {
+                                d3.select("#seqedgehist").selectAll("svg").remove();
+                            }
+
+                            self.changeintarget();
+                        }
+                        else {
+                            gelem("topleft1").innerHTML = "Feature layout unavailable";
+                            gelem("topright1").innerHTML = "Choose another layout";
+                        }
                     }
                     else if (ds["typefeature"] == "otherss") {
                         if ("layoutfeature" in ds && ds["layoutfeature"] != "" && "layout" in conf) {
@@ -1979,22 +2091,37 @@ function GraphFromFeatures() {
             CCTT.id = c;
             VertexColorF = CCTT.interpolate();
 
-            chart_palettecolors(self.layoutfeatures.selectbythreshold,
-                "seq1", 20, self.lwidth-20, VertexColorF);
+            if (self.layoutfeatures && self.layoutfeatures.selectbythreshold) {
+                chart_palettecolors(self.layoutfeatures.selectbythreshold,
+                    "seq1", 20, self.lwidth-20, VertexColorF);
+            }
 
-            self.layoutfeatures.vertexcolorf = VertexColorF;
-            self.layoutfeatures.updatecolors();
+            if (self.layoutfeatures) {
+                self.layoutfeatures.vertexcolorf = VertexColorF;
+                if (self.layoutfeatures.updatecolors) {
+                    self.layoutfeatures.updatecolors();
+                }
+                else if (self.layoutfeatures.applyNodeStyles) {
+                    self.layoutfeatures.applyNodeStyles();
+                }
+            }
         }
         else if(self.colorstableshitttype==2){
             CCTT.id = c;
             EdgeColorF = CCTT.interpolate();
-            chart_histogram(self.setToolpiltex,
-                self.hideToolpiltex,
-                self.layoutfeatures.updatelinkoption,
-                "seqedgehist", self.lwidth, EdgeColorF, self.datagff.layoutfeature["edgehist"]);
+            if (self.layoutfeatures && self.layoutfeatures.updatelinkoption) {
+                chart_histogram(self.setToolpiltex,
+                    self.hideToolpiltex,
+                    self.layoutfeatures.updatelinkoption,
+                    "seqedgehist", self.lwidth, EdgeColorF, self.datagff.layoutfeature["edgehist"]);
+            }
 
-            self.layoutfeatures.edgecolorf = EdgeColorF;
-            self.layoutfeatures.drawedges();
+            if (self.layoutfeatures) {
+                self.layoutfeatures.edgecolorf = EdgeColorF;
+                if (self.layoutfeatures.drawedges) {
+                    self.layoutfeatures.drawedges();
+                }
+            }
         }
         else if(self.colorstableshitttype==3){
             CCTT.id = c;
@@ -2006,7 +2133,7 @@ function GraphFromFeatures() {
     };
 
     this.settarget = function () {
-        self.target = parseInt(gelem("target").value);
+        self.target = self.getTargetId();
         self.USFOBJ.print();
     }
 

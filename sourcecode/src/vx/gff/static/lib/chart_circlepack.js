@@ -12,6 +12,11 @@ function chart_circlepack(idview, selft, vertexcolorf){
     
     self.w = selft.lwidth;
     self.graph = selft.datagff.layoutfeature["graph"];
+    self.vertexcolorf = vertexcolorf;
+
+    self.nodeColorMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "color") : node.weight;
+    };
     
     //self.data = selft.datagff.layoutfeature["tree"];
     //console.log(data);
@@ -68,7 +73,7 @@ function chart_circlepack(idview, selft, vertexcolorf){
       .attr("class", function(d) { return d.parent ? d.children ? "nodex" : "nodex nodex--leaf" : "nodex nodex--root"; })
       .style("fill", function(d) { 
         console.log("d.id", d.id);
-        return d.children ? color(d.depth) : vertexcolorf(self.graph.nodes[d.data.id].weight); })
+        return d.children ? color(d.depth) : self.vertexcolorf(self.nodeColorMetric(self.graph.nodes[d.data.id])); })
       .on("click", function(d) {
         if (!d.children && d.data && d.data.id !== undefined && self.graph.nodes[d.data.id] && self.graph.nodes[d.data.id].category == 0) {
           var mode = selft.ispresskey == 1 ? "add" : (selft.ispresskey == 2 ? "remove" : "replace");
@@ -166,6 +171,27 @@ function chart_circlepack(idview, selft, vertexcolorf){
     };
     this.updatesizecircle = function (pct) {
         //
+    };
+
+    this.selectbythreshold = function (T1) {
+      var ids = [];
+      var taindex = selft.auxfeatureselectedf[selft.target];
+      for (var i = 0; i < self.graph.nodes.length; ++i) {
+        var node = self.graph.nodes[i];
+        if (node.category == 0 && self.nodeColorMetric(node) >= T1 && node.name != taindex) {
+          ids.push(node.name);
+        }
+      }
+      selft.selectFeatureIds(ids, "replace");
+      self.highlightforce(selft.featureselected, {"silent": true});
+      selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
+    };
+
+    this.applyNodeStyles = function () {
+      circle.style("fill", function(d) {
+        return d.children ? color(d.depth) : self.vertexcolorf(self.nodeColorMetric(self.graph.nodes[d.data.id]));
+      });
+      self.highlightforce(selft.featureselected, {"silent": true});
     };
 
 }

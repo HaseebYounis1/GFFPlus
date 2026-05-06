@@ -1,6 +1,6 @@
 # GFF Optimization Changes
 
-All 63 tests pass after every change listed here. Results are numerically
+All 64 tests pass after every change listed here. Results are numerically
 identical to the original code unless noted otherwise.
 
 ---

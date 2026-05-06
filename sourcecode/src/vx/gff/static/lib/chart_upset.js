@@ -13,6 +13,13 @@ function chart_upset(idview, selft, vertexcolorf) {
     self.maxSets = 12;
     self.selectedIndexes = [];
 
+    self.nodeColorMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "color") : node.weight;
+    };
+    self.nodeSizeMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "size") : node.weight;
+    };
+
     d3.select(idview).selectAll("svg").remove();
 
     self.svg = d3.select(idview).append("svg")
@@ -31,7 +38,7 @@ function chart_upset(idview, selft, vertexcolorf) {
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (var i = 0; i < self.graph.nodes.length; ++i) {
             var node = self.graph.nodes[i];
-            if (node.category == 0 && node.weight >= T1 && node.name != taindex) {
+            if (node.category == 0 && self.nodeColorMetric(node) >= T1 && node.name != taindex) {
                 ids.push(node.name);
             }
         }
@@ -89,6 +96,9 @@ function chart_upset(idview, selft, vertexcolorf) {
     self.showedges = function () {};
     self.updateedgestransparency = function () {};
     self.updatesizecircle = function () {};
+    self.applyNodeStyles = function () {
+        self.draw();
+    };
 
     self.getCandidateSets = function () {
         var picked = {};
@@ -108,7 +118,8 @@ function chart_upset(idview, selft, vertexcolorf) {
                 "nodeId": nodeId,
                 "featureId": node.label,
                 "name": featureName,
-                "weight": node.weight
+                "weight": self.nodeColorMetric(node),
+                "sizeWeight": self.nodeSizeMetric(node)
             });
         }
 
@@ -120,7 +131,7 @@ function chart_upset(idview, selft, vertexcolorf) {
             var ranked = self.graph.nodes.filter(function (d) {
                 return d.category == 0;
             }).sort(function (a, b) {
-                return b.weight - a.weight;
+                return self.nodeColorMetric(b) - self.nodeColorMetric(a);
             });
             for (var j = 0; j < ranked.length && sets.length < 8; ++j) {
                 addNode(ranked[j].name);
@@ -353,7 +364,7 @@ function chart_upset(idview, selft, vertexcolorf) {
             .append("circle")
             .attr("class", "upset-set-dot")
             .attr("cy", function (d) { return d.setIndex * rowStep; })
-            .attr("r", function (d) { return d.active ? 4.5 : 3; })
+            .attr("r", function (d) { return d.active ? 4.5 + ((d.set.sizeWeight || 0) * 2) : 3; })
             .style("fill", function (d) {
                 return d.active ? self.vertexcolorf(d.set.weight) : "#293244";
             })

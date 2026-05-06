@@ -14,6 +14,13 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
     self.link = null;
     self.node = null;
 
+    self.nodeColorMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "color") : node.weight;
+    };
+    self.nodeSizeMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "size") : node.weight;
+    };
+
     d3.select(idview).selectAll("svg").remove();
     self.svg = d3.select(idview).append("svg")
         .attr("width", self.width)
@@ -87,7 +94,10 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
                 "members": members,
                 "size": members.length,
                 "weight": d3.mean(members, function (id) {
-                    return self.graph.nodes[id].weight || 0;
+                    return self.nodeColorMetric(self.graph.nodes[id]) || 0;
+                }) || 0,
+                "sizeWeight": d3.mean(members, function (id) {
+                    return self.nodeSizeMetric(self.graph.nodes[id]) || 0;
                 }) || 0
             });
         }
@@ -154,7 +164,7 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (var i = 0; i < self.graph.nodes.length; ++i) {
             var node = self.graph.nodes[i];
-            if (node.category == 0 && node.weight >= T1 && node.name != taindex) {
+            if (node.category == 0 && self.nodeColorMetric(node) >= T1 && node.name != taindex) {
                 ids.push(node.name);
             }
         }
@@ -250,7 +260,7 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
 
         self.node.append("circle")
             .attr("r", function (d) {
-                return Math.min(38, 8 + Math.sqrt(d.size) * 5);
+                return Math.min(42, 8 + Math.sqrt(d.size) * 4 + (d.sizeWeight * 8));
             })
             .style("fill", function (d) { return self.vertexcolorf(d.weight); })
             .style("stroke", "#293244")
@@ -270,7 +280,7 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
             .force("charge", d3.forceManyBody().strength(-180))
             .force("center", d3.forceCenter(self.width / 2, self.height / 2))
             .force("collide", d3.forceCollide().radius(function (d) {
-                return Math.min(42, 12 + Math.sqrt(d.size) * 5);
+                return Math.min(46, 12 + Math.sqrt(d.size) * 4 + (d.sizeWeight * 8));
             }))
             .on("tick", function () {
                 self.link
@@ -294,6 +304,9 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
         self.link.style("stroke-opacity", selft.edgetransparency);
     };
     self.updatesizecircle = function () {};
+    self.applyNodeStyles = function () {
+        self.draw();
+    };
 
     self.draw();
 }

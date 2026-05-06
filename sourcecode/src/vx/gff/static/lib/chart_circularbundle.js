@@ -159,6 +159,18 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
     self.radius = self.width / 2;
     self.r = 4;
 
+    self.nodeColorMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "color") : node.weight;
+    };
+    self.nodeSizeMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "size") : node.weight;
+    };
+    self.nodeTooltip = function (node) {
+        return selft.getFeatureNodeTooltip ?
+            selft.getFeatureNodeTooltip(node, selft.datagff.layoutfeature.ranking) :
+            selft.datagff.fenames[node.label] + ":" + selft.datagff.layoutfeature.ranking[node.name];
+    };
+
     d3.select(idview).selectAll("svg").remove();
     self.svgRoot = d3.select(idview).append("svg")
         .attr("width", self.width)
@@ -234,7 +246,7 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
                 selft.setToolpiltex(
                     d3.event.pageX,
                     d3.event.pageY,
-                    selft.datagff.fenames[node.label] + ":" + selft.datagff.layoutfeature.ranking[node.name]
+                    self.nodeTooltip(node)
                 );
             }
         })
@@ -255,10 +267,10 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
 
     self.node.append("circle")
         .attr("r", function (d) {
-            return d.data.node.category == 1 ? 2 : self.r + (d.data.node.weight * 2);
+            return d.data.node.category == 1 ? 2 : self.r + (self.nodeSizeMetric(d.data.node) * 2);
         })
         .style("fill", function (d) {
-            return d.data.node.category == 1 ? "#c7c7c7" : self.vertexcolorf(d.data.node.weight);
+            return d.data.node.category == 1 ? "#c7c7c7" : self.vertexcolorf(self.nodeColorMetric(d.data.node));
         })
         .style("stroke", "#ffffff")
         .style("stroke-width", 0.75);
@@ -284,7 +296,7 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (var i = 0; i < self.graph.nodes.length; ++i) {
             var node = self.graph.nodes[i];
-            if (node.category == 0 && node.weight >= T1 && node.name != taindex) {
+            if (node.category == 0 && self.nodeColorMetric(node) >= T1 && node.name != taindex) {
                 ids.push(node.name);
             }
         }
@@ -338,7 +350,21 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
     self.updateedgestransparency = function () {
         self.links.style("stroke-opacity", selft.edgetransparency);
     };
-    self.updatesizecircle = function () {};
+    self.updatesizecircle = function () {
+        self.node.selectAll("circle")
+            .attr("r", function (d) {
+                return d.data.node.category == 1 ? 2 : self.r + (self.nodeSizeMetric(d.data.node) * 2);
+            });
+    };
+
+    self.applyNodeStyles = function () {
+        self.node.selectAll("circle")
+            .style("fill", function (d) {
+                return d.data.node.category == 1 ? "#c7c7c7" : self.vertexcolorf(self.nodeColorMetric(d.data.node));
+            });
+        self.updatesizecircle();
+        self.highlightforce(selft.featureselected, {"silent": true});
+    };
 
     self.highlightforce(selft.featureselected, {"silent": true});
 }

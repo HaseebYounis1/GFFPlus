@@ -13,6 +13,10 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
     self.edgecolorf = edgecolorf;
     self.maxFeatures = 80;
 
+    self.nodeColorMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "color") : node.weight;
+    };
+
     d3.select(idview).selectAll("svg").remove();
     self.svg = d3.select(idview).append("svg")
         .attr("width", self.width)
@@ -52,7 +56,7 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
             var ranked = self.graph.nodes.filter(function (d) {
                 return d.category == 0;
             }).sort(function (a, b) {
-                return b.weight - a.weight;
+                return self.nodeColorMetric(b) - self.nodeColorMetric(a);
             });
             for (var r = 0; r < ranked.length && ordered.length < self.maxFeatures; ++r) {
                 addNode(ranked[r].name);
@@ -82,7 +86,7 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (var i = 0; i < self.graph.nodes.length; ++i) {
             var node = self.graph.nodes[i];
-            if (node.category == 0 && node.weight >= T1 && node.name != taindex) {
+            if (node.category == 0 && self.nodeColorMetric(node) >= T1 && node.name != taindex) {
                 ids.push(node.name);
             }
         }
@@ -281,6 +285,9 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
     self.showedges = function () {};
     self.updateedgestransparency = function () {};
     self.updatesizecircle = function () {};
+    self.applyNodeStyles = function () {
+        self.draw();
+    };
 
     self.draw();
 }

@@ -52,7 +52,6 @@ class XAIPipeline:
 
     def execute(self, data_path, argms, feature_names=None, unselectedfeids=None):
         dataset_id = str(argms["file"])
-        target_id = int(argms.get("target", -1))
         csv_path = os.path.join(data_path, dataset_id, "transform.csv")
         if not os.path.exists(csv_path):
             raise FileNotFoundError("transform.csv was not found for dataset {}".format(dataset_id))
@@ -62,6 +61,7 @@ class XAIPipeline:
         if feature_names and len(feature_names) == len(columns):
             columns = [str(col).strip() for col in feature_names]
 
+        target_id = _target_id_arg(argms.get("target"), len(columns) - 1)
         if target_id < 0 or target_id >= len(columns):
             raise ValueError("Invalid target column id: {}".format(target_id))
 
@@ -497,6 +497,17 @@ def _int_arg(argms, name, default, minimum=None, maximum=None):
     if maximum is not None:
         value = min(int(maximum), value)
     return value
+
+
+def _target_id_arg(value, fallback):
+    if value is None:
+        return int(fallback)
+    try:
+        if isinstance(value, float) and np.isnan(value):
+            return int(fallback)
+        return int(value)
+    except (TypeError, ValueError):
+        return int(fallback)
 
 
 def _bool_arg(argms, name, default):

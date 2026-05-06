@@ -17,6 +17,16 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
     self.initv = selft.datagff.layoutfeature["initvertex1"];
     self.initv2 = selft.datagff.layoutfeature["initvertex2"];
     self.argms = argmsi;
+    self.vertexcolorf = vertexcolorf;
+
+    self.nodeColorMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "color") : node.weight;
+    };
+    self.nodeTooltip = function (node) {
+        return selft.getFeatureNodeTooltip ?
+            selft.getFeatureNodeTooltip(node, self.ranking) :
+            selft.datagff.fenames[node.label] + ": " + node.weight;
+    };
 
     self.data = maketree(self.root, self.graph["nodes"], self.initv2);
     //console.log("X·E",self.data);
@@ -121,7 +131,8 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
         self.newSlice.append('title')
             //.text(d => d.data.name + '\n' + (graph.nodes[d.data.name].weight));
             .text(d => {
-                var strinma = (self.graph.nodes[d.data.id].category == 1)? "extra" : selft.datagff.fenames[d.data.name]+": "+self.graph.nodes[d.data.id].weight;
+                var node = self.graph.nodes[d.data.id];
+                var strinma = (node.category == 1)? "extra" : self.nodeTooltip(node);
                 return strinma+'\n';
             });
 
@@ -130,7 +141,8 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
             // to color
 //            .style('fill', d => color((d.children ? d : d.parent).data.name))
             .style('fill', function(d){
-                return (self.graph.nodes[d.data.id].category == 1) ? '#ccc' : vertexcolorf(self.graph.nodes[d.data.id].weight);
+                var node = self.graph.nodes[d.data.id];
+                return (node.category == 1) ? '#ccc' : self.vertexcolorf(self.nodeColorMetric(node));
             })
             .attr('d', arc);
         //target node
@@ -241,7 +253,7 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (i = 0; i < self.graph.nodes.length; ++i) {
             d = self.graph.nodes[i];
-            if (d.category == 0 && d.weight >= self.T1 && d.name != taindex) {
+            if (d.category == 0 && self.nodeColorMetric(d) >= self.T1 && d.name != taindex) {
                 selft.featureselected.push(d.name);
             }
         }
@@ -264,6 +276,21 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
     };
     this.updatesizecircle = function (pct) {
         //
+    };
+
+    this.applyNodeStyles = function () {
+        self.newSlice.selectAll(".main-arc")
+            .style("fill", function (d) {
+                var node = self.graph.nodes[d.data.id];
+                return node.category == 1 ? "#ccc" : self.vertexcolorf(self.nodeColorMetric(node));
+            });
+        if (self.initv != -1) {
+            var selectionBArray = self.newSlice.selectAll(".main-arc").nodes();
+            if (selectionBArray[self.pppi[self.initv]]) {
+                selectionBArray[self.pppi[self.initv]].style.fill = "#666";
+            }
+        }
+        self.highlightforce(selft.featureselected, {"silent": true});
     };
 
         

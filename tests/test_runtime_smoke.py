@@ -160,7 +160,7 @@ class RuntimeSmokeTests(unittest.TestCase):
         app = SimpleNamespace(
             argms={
                 "file": self.dataset_id,
-                "target": 3,
+                "target": None,
                 "xai_enable_shap": 0,
                 "xai_estimators": 8,
                 "xai_train_rows": 4,
@@ -173,6 +173,7 @@ class RuntimeSmokeTests(unittest.TestCase):
         result = Query.runXAI(app)
 
         self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["target"]["id"], 3)
         self.assertEqual(result["target"]["name"], "target")
         self.assertIn(result["model"]["type"], ("ExtraTreesClassifier", "ExtraTreesRegressor"))
         self.assertEqual(len(result["features"]), 3)
@@ -192,6 +193,44 @@ class RuntimeSmokeTests(unittest.TestCase):
         )
         self.assertEqual(opened["statusopt"], 0)
         self.assertEqual(len(opened["response"][0]["response"]), 3)
+
+    def test_open_dataset_reads_cached_layout_after_error_status(self):
+        dataset_dir = Path(Settings.DATA_PATH) / self.dataset_id
+        DBFile.writeFile(
+            str(dataset_dir / "feature.obj"),
+            {"graph": {"nodes": [{"name": 0, "label": 0, "category": 0}], "links": [], "whole": []}},
+        )
+        MongoDB.insert(
+            None,
+            "data",
+            {
+                "_id": self.dataset_id,
+                "_id_user": "localuser",
+                "name": "Smoke",
+                "type": ".csv",
+                "statusopt": 2,
+                "statusval": "making projection from features selected",
+                "layoutfeature": "feature.obj",
+                "typefeature": "graph",
+                "versionfeature": Settings.VERSION,
+            },
+        )
+
+        opened = Query.opendataset(
+            SimpleNamespace(
+                argms={
+                    "file": self.dataset_id,
+                    "data": {
+                        "collect": "features",
+                        "query": [["layoutfeature", "graph", "nodes"]],
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(opened["statusopt"], 0)
+        self.assertEqual(len(opened["response"][0]["response"]), 1)
+        self.assertIn("statuswarning", opened)
 
     def test_dbfile_write_is_atomic_and_reloadable(self):
         path = Path(Settings.DATA_PATH) / self.dataset_id / "feature.obj"

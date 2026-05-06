@@ -15,6 +15,13 @@ function chart_bipartite(idview, selft, vertexcolorf) {
     self.link = null;
     self.node = null;
 
+    self.nodeColorMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "color") : node.weight;
+    };
+    self.nodeSizeMetric = function (node) {
+        return selft.getFeatureNodeMetric ? selft.getFeatureNodeMetric(node, "size") : node.weight;
+    };
+
     d3.select(idview).selectAll("svg").remove();
     self.svg = d3.select(idview).append("svg")
         .attr("width", self.width)
@@ -40,7 +47,8 @@ function chart_bipartite(idview, selft, vertexcolorf) {
             features.push({
                 "id": node.name,
                 "name": selft.datagff.fenames[node.label],
-                "weight": node.weight
+                "weight": self.nodeColorMetric(node),
+                "sizeWeight": self.nodeSizeMetric(node)
             });
         }
 
@@ -52,7 +60,7 @@ function chart_bipartite(idview, selft, vertexcolorf) {
             var ranked = self.graph.nodes.filter(function (d) {
                 return d.category == 0;
             }).sort(function (a, b) {
-                return b.weight - a.weight;
+                return self.nodeColorMetric(b) - self.nodeColorMetric(a);
             });
             for (var j = 0; j < ranked.length && features.length < self.maxFeatures; ++j) {
                 addFeature(ranked[j].name);
@@ -158,7 +166,8 @@ function chart_bipartite(idview, selft, vertexcolorf) {
                     "type": "feature",
                     "featureId": feature.id,
                     "name": feature.name,
-                    "weight": feature.weight
+                    "weight": feature.weight,
+                    "sizeWeight": feature.sizeWeight
                 };
             }),
             "instances": instances.map(function (instance) {
@@ -179,7 +188,7 @@ function chart_bipartite(idview, selft, vertexcolorf) {
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (var i = 0; i < self.graph.nodes.length; ++i) {
             var node = self.graph.nodes[i];
-            if (node.category == 0 && node.weight >= T1 && node.name != taindex) {
+            if (node.category == 0 && self.nodeColorMetric(node) >= T1 && node.name != taindex) {
                 ids.push(node.name);
             }
         }
@@ -317,7 +326,7 @@ function chart_bipartite(idview, selft, vertexcolorf) {
 
         self.node.append("circle")
             .attr("r", function (d) {
-                return d.type == "feature" ? 7 + (d.weight * 5) : 3 + (d.weight * 5);
+                return d.type == "feature" ? 7 + ((d.sizeWeight || d.weight) * 5) : 3 + (d.weight * 5);
             })
             .style("fill", function (d) {
                 return d.type == "feature" ? self.vertexcolorf(d.weight) : "#7dd3fc";
@@ -369,6 +378,9 @@ function chart_bipartite(idview, selft, vertexcolorf) {
         self.link.style("stroke-opacity", selft.edgetransparency);
     };
     self.updatesizecircle = function () {};
+    self.applyNodeStyles = function () {
+        self.draw();
+    };
 
     self.draw();
 }

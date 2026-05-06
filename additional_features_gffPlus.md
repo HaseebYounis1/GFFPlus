@@ -61,6 +61,26 @@ This file tracks the lightweight extensions and performance work added on top of
   - Now displays `"Error building feature graph"` / `"Error building
     projection"` in the relevant status panels.
 
+- **Cached datasets not rendering after a failed job**
+  - `loadObject()` stopped forever when `Query.opendataset` returned
+    `statusopt=2`, even if valid cached `feature.obj`, `instance.obj`, and
+    `xai.obj` files were already present.
+  - `Query.opendataset` now treats dataset opening as a read-only operation:
+    cached artifacts are returned with `statusopt=0`, and the previous failed
+    job message is preserved as `statuswarning`.
+  - This fixes Core dataset loads where an old failed projection status blocked
+    the feature graph from rendering.
+
+- **XAI overlays depended silently on Force layout**
+  - XAI node color, node size, threshold filtering, and SHAP similarity are
+    node-link overlays. They require the Force chart style hooks.
+  - The XAI buttons now switch the feature view to Force automatically when an
+    XAI overlay is requested, instead of doing nothing in layouts such as
+    Bipartite or UpSet.
+  - Palette/histogram controls now check that a layout implements the needed
+    methods before binding callbacks, so layouts without those hooks still
+    render normally.
+
 - **MNIST feature graph taking 15+ seconds**
   - Three compounded bottlenecks caused this:
   
@@ -151,6 +171,9 @@ This file tracks the lightweight extensions and performance work added on top of
     features, and switching to a SHAP similarity graph when SHAP data exists.
   - Existing feature relevance graph modes remain available; XAI is an
     alternate node metric rather than a replacement for the original GFF graph.
+  - XAI color/size/threshold and SHAP similarity are displayed as Force graph
+    overlays. Other feature layouts remain available for their original graph
+    analyses, but they do not create separate XAI charts.
 
 ## Performance And Lightweight Work
 
