@@ -32,6 +32,20 @@ Then install optional explainability libraries if you want SHAP summaries or
 future experimental explainers:
 * `python -m pip install -r requirements-xai.txt`
 
+Current projection and XAI behaviour:
+* PCA, t-SNE, UMAP, MDS, and Pair are instance projections computed from the
+  features selected in any feature graph layout. If fewer than two features are
+  selected, the projection panel explains why no projection is shown.
+* UMAP falls back to a scikit-learn spectral/PCA path when `umap-learn` is not
+  available or the dataset exceeds the adaptive CPU limit, and the UI reports
+  the fallback reason.
+* XAI importance can colour, size, and threshold feature nodes across the
+  implemented graph layouts when the visual channel is compatible. SHAP
+  similarity remains a Force graph link overlay because it is a feature-feature
+  similarity network.
+* The selected-feature XAI panel ranks the current selection by model
+  importance and shows permutation importance plus optional SHAP scores.
+
 For NVIDIA GPU acceleration with PyTorch on Windows or Linux:
 * `python -m pip install -r requirements-torch-cu128.txt`
 

@@ -307,6 +307,7 @@ function GraphFromFeatures() {
     this.onFeatureSelectionChanged = function (options) {
         options = options || {};
         self.normalizeFeatureSelection();
+        self.renderXAISelectedSummary();
 
         if (self.layoutfeatures != null && !options.skipFeatureHighlight) {
             self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
@@ -325,6 +326,10 @@ function GraphFromFeatures() {
         }
 
         if (self.datafileselected == "" || self.featureselected.length < 2) {
+            self.setProjectionPanelStatus(
+                "Projection unavailable",
+                "Select at least two features from any feature graph"
+            );
             return;
         }
 
@@ -420,6 +425,267 @@ function GraphFromFeatures() {
             targetElement.selectedIndex = target;
         }
         return target;
+    };
+
+    this.escapeHTML = function (value) {
+        var map = {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;"
+        };
+        return String(value === undefined || value === null ? "" : value)
+            .replace(/[&<>"']/g, function (chr) {
+                return map[chr];
+            });
+    };
+
+    this.formatScore = function (value) {
+        value = parseFloat(value || 0.0);
+        if (!isFinite(value)) {
+            value = 0.0;
+        }
+        if (value == 0.0) {
+            return "0.0000";
+        }
+        if (Math.abs(value) >= 1.0) {
+            return value.toFixed(3);
+        }
+        if (Math.abs(value) >= 0.001) {
+            return value.toFixed(4);
+        }
+        return value.toExponential(2);
+    };
+
+    this.renderXAISelectedSummary = function () {
+        var panel = gelem("xaiselectedsummary");
+        if (!panel) {
+            return;
+        }
+        self.normalizeFeatureSelection();
+        var graph = self.datagff && self.datagff.layoutfeature && self.datagff.layoutfeature.graph
+            ? self.datagff.layoutfeature.graph : {};
+        var nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+        var names = self.datagff && Array.isArray(self.datagff.fenames) ? self.datagff.fenames : [];
+        var rows = [];
+        var targetCount = 0;
+
+        for (var selectedId of self.featureselected) {
+            var node = nodes[selectedId];
+            if (!node) {
+                continue;
+            }
+            if (node.category == 1) {
+                targetCount += 1;
+                continue;
+            }
+            var featureName = names[node.label] !== undefined ? names[node.label] : node.label;
+            rows.push({
+                "id": node.label,
+                "name": featureName,
+                "importance": parseFloat(node.xai_importance || 0.0),
+                "importanceNorm": parseFloat(node.xai_importance_norm || 0.0),
+                "permutation": parseFloat(node.xai_permutation || 0.0),
+                "permutationNorm": parseFloat(node.xai_permutation_norm || 0.0),
+                "shap": parseFloat(node.xai_shap || 0.0),
+                "shapNorm": parseFloat(node.xai_shap_norm || 0.0)
+            });
+        }
+
+        if (rows.length == 0 && targetCount == 0) {
+            panel.style.display = "none";
+            panel.innerHTML = "";
+            return;
+        }
+
+        var hasXai = self.hasXAI();
+        var shap = hasXai && self.datagff.layoutxai ? (self.datagff.layoutxai.shap || {}) : {};
+        var shapAvailable = !!shap.available;
+        var xaiTarget = hasXai && self.datagff.layoutxai.target ? self.datagff.layoutxai.target : {};
+        var model = hasXai && self.datagff.layoutxai.model ? self.datagff.layoutxai.model : {};
+        var targetName = xaiTarget.name || names[parseInt(self.target, 10)] || "";
+        var selectedLabel = rows.length + (targetCount > 0 ? " + target" : "");
+        var html = "<div style='display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:3px;'>" +
+            "<strong>XAI selected features</strong>" +
+            "<span>Selected: " + self.escapeHTML(selectedLabel) + "</span>";
+
+        if (targetName !== "") {
+            html += "<span>Target: " + self.escapeHTML(targetName) + "</span>";
+        }
+        if (hasXai && model.type) {
+            html += "<span>Model: " + self.escapeHTML(model.type) + "</span>";
+        }
+        if (hasXai && self.xaiThreshold > 0.0) {
+            html += "<span>Threshold: " + self.formatScore(self.xaiThreshold) + "</span>";
+        }
+        html += "</div>";
+
+        if (rows.length == 0) {
+            html += "<div>Only the target is selected; XAI feature scores are shown for input features.</div>";
+            panel.innerHTML = html;
+            panel.style.display = "block";
+            return;
+        }
+
+        if (hasXai) {
+            rows.sort(function (a, b) {
+                return (b.importanceNorm - a.importanceNorm) ||
+                    (b.permutationNorm - a.permutationNorm) ||
+                    String(a.name).localeCompare(String(b.name));
+            });
+        }
+        else {
+            rows.sort(function (a, b) {
+                return String(a.name).localeCompare(String(b.name));
+            });
+        }
+
+        var limit = Math.min(rows.length, 10);
+        if (!hasXai) {
+            var chips = [];
+            for (var chipIndex = 0; chipIndex < Math.min(rows.length, 16); chipIndex++) {
+                chips.push("<span style='display:inline-block; margin:1px 3px 1px 0; padding:2px 5px; background:#fff; border:1px solid #c7d3e5;'>" +
+                    self.escapeHTML(rows[chipIndex].name) + "</span>");
+            }
+            if (rows.length > 16) {
+                chips.push("<span>+" + (rows.length - 16) + " more</span>");
+            }
+            html += "<div>XAI scores unavailable for this selection.</div><div>" + chips.join("") + "</div>";
+            panel.innerHTML = html;
+            panel.style.display = "block";
+            return;
+        }
+
+        html += "<table style='width:100%; border-collapse:collapse; table-layout:fixed;'>" +
+            "<tr>" +
+            "<th style='text-align:left; width:34%; font-weight:600;'>Feature</th>" +
+            "<th style='text-align:right; width:13%; font-weight:600;'>Imp.</th>" +
+            "<th style='text-align:right; width:13%; font-weight:600;'>Perm.</th>";
+        if (shapAvailable) {
+            html += "<th style='text-align:right; width:13%; font-weight:600;'>SHAP</th>";
+        }
+        html += "<th style='text-align:left; font-weight:600;'>Rank</th></tr>";
+
+        for (var rowIndex = 0; rowIndex < limit; rowIndex++) {
+            var row = rows[rowIndex];
+            var norm = Math.max(0.0, Math.min(1.0, row.importanceNorm || 0.0));
+            var pct = Math.round(norm * 100);
+            var muted = self.xaiThreshold > 0.0 && norm < self.xaiThreshold;
+            var fill = muted ? "#8f99a8" : "#0b78d0";
+            html += "<tr>" +
+                "<td title='" + self.escapeHTML(row.name) + "' style='white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:6px;'>" +
+                    self.escapeHTML(row.name) +
+                "</td>" +
+                "<td style='text-align:right;'>" + self.formatScore(row.importance) + "</td>" +
+                "<td style='text-align:right;'>" + self.formatScore(row.permutation) + "</td>";
+            if (shapAvailable) {
+                html += "<td style='text-align:right;'>" + self.formatScore(row.shap) + "</td>";
+            }
+            html += "<td style='padding-left:6px;'>" +
+                    "<div style='height:8px; width:100%; background:#d7e1ef; overflow:hidden;'>" +
+                        "<div style='height:8px; width:" + pct + "%; background:" + fill + ";'></div>" +
+                    "</div>" +
+                "</td>" +
+            "</tr>";
+        }
+        html += "</table>";
+        if (rows.length > limit) {
+            html += "<div style='margin-top:2px;'>Showing top " + limit + " of " + rows.length + " selected features.</div>";
+        }
+        if (!shapAvailable && shap.reason) {
+            html += "<div style='margin-top:2px;'>SHAP: " + self.escapeHTML(shap.reason) + "</div>";
+        }
+        panel.innerHTML = html;
+        panel.style.display = "block";
+    };
+
+    this.setProjectionPanelStatus = function (left, right) {
+        var leftElem = gelem("topleft2");
+        var rightElem = gelem("topright2");
+        if (leftElem) {
+            leftElem.textContent = left || "";
+        }
+        if (rightElem) {
+            rightElem.textContent = right || "";
+        }
+    };
+
+    this.wrapPanelText = function (value, maxChars, maxLines) {
+        var words = String(value || "").split(/\s+/);
+        var lines = [];
+        var current = "";
+        for (var word of words) {
+            if (current.length > 0 && (current.length + word.length + 1) > maxChars) {
+                lines.push(current);
+                current = word;
+                if (lines.length >= maxLines) {
+                    break;
+                }
+            }
+            else {
+                current = current.length > 0 ? current + " " + word : word;
+            }
+        }
+        if (lines.length < maxLines && current.length > 0) {
+            lines.push(current);
+        }
+        return lines.slice(0, maxLines);
+    };
+
+    this.showProjectionPanelMessage = function (left, right) {
+        self.setProjectionPanelStatus(left, right);
+        var width = Math.max(300, parseInt(self.lwidth, 10) || 500);
+        var height = width;
+        d3.select("#visp").selectAll("svg").remove();
+        d3.select("#seq2").selectAll("svg").remove();
+        var infLeft = gelem("infleft2");
+        var infRight = gelem("infright2");
+        if (infLeft) {
+            infLeft.innerHTML = "";
+        }
+        if (infRight) {
+            infRight.innerHTML = "";
+        }
+        var svg = d3.select("#visp").append("svg")
+            .attr("width", width)
+            .attr("height", height);
+        svg.append("rect")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("fill", "#f7f9fc");
+        svg.append("text")
+            .attr("x", width / 2)
+            .attr("y", height / 2 - 20)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "15px")
+            .attr("font-weight", "600")
+            .attr("fill", "#1a2d45")
+            .text(left || "Projection unavailable");
+        var lines = self.wrapPanelText(right || "", 64, 3);
+        for (var i = 0; i < lines.length; i++) {
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", height / 2 + 8 + (i * 16))
+                .attr("text-anchor", "middle")
+                .attr("font-size", "12px")
+                .attr("fill", "#465a72")
+                .text(lines[i]);
+        }
+    };
+
+    this.updateProjectionFallbackStatus = function (ds) {
+        ds = ds || self.datagff || {};
+        var layout = ds.layoutinstance || {};
+        var requested = layout.projectionrequested || "";
+        var used = layout.projectionused || "";
+        if (requested && used && requested != used) {
+            var reason = layout.projectionfallback ||
+                (requested.toUpperCase() + " was replaced by " + used.toUpperCase() + " for this dataset");
+            self.setProjectionPanelStatus("Projection: " + used.toUpperCase(), reason);
+            return true;
+        }
+        return false;
     };
 
     this.applyXAIAttributesToGraph = function (ds) {
@@ -550,6 +816,7 @@ function GraphFromFeatures() {
             if (this.ou && (this.ou.status == "ok" || this.ou.status == "partial")) {
                 self.datagff.layoutxai = this.ou;
                 self.applyXAIAttributesToGraph(self.datagff);
+                self.renderXAISelectedSummary();
                 var needsXAIStyleLayout = self.xaiColorMode == "xai_importance" ||
                     self.xaiSizeMode == "xai_importance" ||
                     self.xaiThreshold > 0.0;
@@ -583,6 +850,7 @@ function GraphFromFeatures() {
             self.ensureXAICompatibleFeatureLayout();
         }
         self.refreshFeatureNodeStyles();
+        self.renderXAISelectedSummary();
     };
 
     this.setXAIImportanceSizeMode = function () {
@@ -596,6 +864,7 @@ function GraphFromFeatures() {
             self.ensureXAICompatibleFeatureLayout();
         }
         self.refreshFeatureNodeStyles();
+        self.renderXAISelectedSummary();
     };
 
     this.selectXAIThreshold = function (threshold) {
@@ -610,6 +879,7 @@ function GraphFromFeatures() {
         if (self.layoutfeatures != null && self.layoutfeatures.selectbythreshold) {
             self.layoutfeatures.selectbythreshold(self.xaiThreshold);
         }
+        self.renderXAISelectedSummary();
     };
 
     this.showSHAPSimilarityGraph = function () {
@@ -684,6 +954,20 @@ function GraphFromFeatures() {
     this.visInstnaces = function () {
         self.cleaninstances();
         //self.setfullScreen();
+        if (self.datafileselected == "") {
+            self.showProjectionPanelMessage(
+                "Projection unavailable",
+                "Open a dataset before running PCA, UMAP, t-SNE, or MDS"
+            );
+            return;
+        }
+        if (self.featureselected.length < 2) {
+            self.showProjectionPanelMessage(
+                "Projection unavailable",
+                "PCA, UMAP, t-SNE, and MDS use selected features from any feature graph; select at least two features"
+            );
+            return;
+        }
         if (self.featureselected.length >= 2) {
             var status = "making projection from features selected";
             var ob = new ServiceData(status);
@@ -1063,6 +1347,7 @@ function GraphFromFeatures() {
                             gelem("topleft1").innerHTML = "Feature layout unavailable";
                             gelem("topright1").innerHTML = "Choose another layout";
                         }
+                        self.renderXAISelectedSummary();
                     }
                     else if (ds["typefeature"] == "otherss") {
                         if ("layoutfeature" in ds && ds["layoutfeature"] != "" && "layout" in conf) {
@@ -1113,10 +1398,17 @@ function GraphFromFeatures() {
                         //var data = ds["layoutinstance"];
                         argms = {"infleft": 'infleft2',"infright": 'infright2'};
                         self.layoutinstance = new plotProjection(ProjectionColorF, "#visp", self, argms);
+                        self.updateProjectionFallbackStatus(ds);
 
                         if (self.datagff.configinstance && self.datagff.configinstance.nodes) {
                             self.auxfeatureselectedi = self.makeFeatureAux(self.datagff.configinstance.nodes);
                         }
+                    }
+                    else {
+                        var fallback = ds.layoutinstance && ds.layoutinstance.projectionfallback
+                            ? ds.layoutinstance.projectionfallback
+                            : "No projection points were returned for the selected features";
+                        self.showProjectionPanelMessage("Projection unavailable", fallback);
                     }
                 }
                 else if (ds["typeinstance"] == "graph") {
@@ -1168,6 +1460,7 @@ function GraphFromFeatures() {
         d3.select("#vis").selectAll("svg").remove();
         d3.select("#seqedgehist").selectAll("svg").remove();
         self.hideFeaturesSelected("feature");
+        self.renderXAISelectedSummary();
         gelem("infleft1").innerHTML = "";
         gelem("infright1").innerHTML = "";
         gelem("topleft1").innerHTML = "";
@@ -1201,6 +1494,7 @@ function GraphFromFeatures() {
         self.cleaninstances();
 
         self.featureselected = [];
+        self.renderXAISelectedSummary();
         //self.ranking = [];
         self.intargetaction = false;
         self.intarget = false;
@@ -1573,6 +1867,12 @@ function GraphFromFeatures() {
             });
             var targetname = self.datagff.fenames[parseInt(gvalue('target'), 10)];
             chart_correlation("#visp", self.dataload || [], featurenames, targetname);
+        }
+        else {
+            self.showProjectionPanelMessage(
+                "Pair projection unavailable",
+                "Select at least two features from any feature graph"
+            );
         }
         //MOPRO.hide();
     };

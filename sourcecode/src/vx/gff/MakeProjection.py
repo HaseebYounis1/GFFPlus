@@ -7,6 +7,8 @@
 from vx.gff.Settings import *
 
 import os
+import sys
+import importlib.util
 import warnings
 from time import process_time
 
@@ -112,43 +114,84 @@ class MakeProjection():
 
         metric = "cosine" if projprox == "DCosine" else "euclidean"
         requested_mt = mt
+        projection_used = mt
+        fallback_reason = ""
         if mt == "tsne" and N > MakeProjection.MAX_EXACT_TSNE_ROWS:
             mt = "pca"
+            projection_used = "pca"
+            fallback_reason = (
+                "t-SNE is limited to {} rows in adaptive CPU mode; PCA was used instead"
+                .format(MakeProjection.MAX_EXACT_TSNE_ROWS)
+            )
         elif mt == "mds" and N > MakeProjection.MAX_EXACT_MDS_ROWS:
             mt = "pca"
+            projection_used = "pca"
+            fallback_reason = (
+                "MDS is limited to {} rows in adaptive CPU mode; PCA was used instead"
+                .format(MakeProjection.MAX_EXACT_MDS_ROWS)
+            )
         elif mt == "umap" and N > MakeProjection.MAX_EXACT_UMAP_ROWS:
             mt = "pca"
-        self.data["projectionrequested"] = requested_mt
-        self.data["projectionused"] = mt
+            projection_used = "pca"
+            fallback_reason = (
+                "UMAP is limited to {} rows in adaptive CPU mode; PCA was used instead"
+                .format(MakeProjection.MAX_EXACT_UMAP_ROWS)
+            )
+        elif mt == "umap" and (
+                sys.version_info >= (3, 13) or importlib.util.find_spec("umap") is None
+        ):
+            projection_used = "spectral"
+            fallback_reason = "UMAP is unavailable in this Python environment; spectral/PCA fallback was used"
 
-        if mt == "tsne":
-            from vx.com.py.projection.TSNEM import TSNEM
-            X2 = TSNEM(X, proxtype=metric).execute();
-        elif mt == "umap":
-            from vx.com.py.projection.UMAPP import UMAPP
-            X2 = UMAPP(X, proxtype=metric).execute();
-        elif mt == "mds":
-            from vx.com.py.projection.MDSP import MDSP
-            X2 = MDSP(X).execute();
-        elif mt == "pca":
+        try:
+            if mt == "tsne":
+                from vx.com.py.projection.TSNEM import TSNEM
+                X2 = TSNEM(X, proxtype=metric).execute();
+            elif mt == "umap":
+                from vx.com.py.projection.UMAPP import UMAPP
+                projector = UMAPP(X, proxtype=metric)
+                X2 = projector.execute();
+                if projector.fallback_reason:
+                    projection_used = "spectral"
+                    if not fallback_reason:
+                        fallback_reason = projector.fallback_reason
+            elif mt == "mds":
+                from vx.com.py.projection.MDSP import MDSP
+                X2 = MDSP(X).execute();
+            elif mt == "pca":
+                from vx.com.py.projection.PCAP import PCAP
+                X2 = PCAP(X).execute();
+            # elif mt == "isomap":
+            #     X2 = ISOMAPP(X).execute();
+            # elif mt == "fastmap":
+            #     X2 = FASTMAPP(X).execute();
+            # elif mt == "lspmds":
+            #     X2 = LSP(X, smpprj=MDSP(), smptype="clusteringmedoids").execute()
+            elif mt == "lsptsne":
+                from vx.com.py.projection.LSPU import LSPU
+                from vx.com.py.projection.TSNEM import TSNEM
+                X2 = LSPU(  X=XR,
+                            smpprj=TSNEM(proxtype=metric),
+                            proxtype=ProximityMatrix.POT[projprox],
+                            smptype="clusteringmedoids"
+                        ).execute()
+            else:
+                X2 = self._pair_projection(X)
+        except Exception as exc:
+            if mt == "pca":
+                raise
             from vx.com.py.projection.PCAP import PCAP
-            X2 = PCAP(X).execute();
-        # elif mt == "isomap":
-        #     X2 = ISOMAPP(X).execute();
-        # elif mt == "fastmap":
-        #     X2 = FASTMAPP(X).execute();
-        # elif mt == "lspmds":
-        #     X2 = LSP(X, smpprj=MDSP(), smptype="clusteringmedoids").execute()
-        elif mt == "lsptsne":
-            from vx.com.py.projection.LSPU import LSPU
-            from vx.com.py.projection.TSNEM import TSNEM
-            X2 = LSPU(  X=XR,
-                        smpprj=TSNEM(proxtype=metric),
-                        proxtype=ProximityMatrix.POT[projprox],
-                        smptype="clusteringmedoids"
-                    ).execute()
-        else:
-            X2 = self._pair_projection(X)
+            X2 = PCAP(X).execute()
+            projection_used = "pca"
+            fallback_reason = "{} failed ({}); PCA was used instead".format(
+                requested_mt.upper(),
+                str(exc)
+            )
+
+        self.data["projectionrequested"] = requested_mt
+        self.data["projectionused"] = projection_used
+        if fallback_reason:
+            self.data["projectionfallback"] = fallback_reason
             
         # elif mt == "lspisomap":
         #     X2 = LSP(X, smpprj=ISOMAPP(), smptype="clusteringmedoids").execute()

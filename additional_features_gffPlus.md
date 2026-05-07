@@ -71,12 +71,15 @@ This file tracks the lightweight extensions and performance work added on top of
   - This fixes Core dataset loads where an old failed projection status blocked
     the feature graph from rendering.
 
-- **XAI overlays depended silently on Force layout**
-  - XAI node color, node size, threshold filtering, and SHAP similarity are
-    node-link overlays. They require the Force chart style hooks.
-  - The XAI buttons now switch the feature view to Force automatically when an
-    XAI overlay is requested, instead of doing nothing in layouts such as
-    Bipartite or UpSet.
+- **XAI overlays were unclear outside Force layout**
+  - XAI node color, node size, and threshold filtering now run through shared
+    feature-node metric helpers instead of depending on the Force chart only.
+  - Force, Bundle, Sunburst, Circle Pack, Heatmap, Community, Bipartite, and
+    UpSet can use XAI importance where the layout has a meaningful visual
+    channel. Size mode affects layouts with independent node radius/weight
+    channels; hierarchy layouts keep their structural area encoding.
+  - SHAP similarity remains a link-based view, so it still switches to the
+    Force graph when SHAP similarity links exist.
   - Palette/histogram controls now check that a layout implements the needed
     methods before binding callbacks, so layouts without those hooks still
     render normally.
@@ -148,6 +151,12 @@ This file tracks the lightweight extensions and performance work added on top of
 - **Additional instance projections**
   - Re-enabled **PCA** and **MDS** in the projection dropdown.
   - Hardened PCA/MDS handling for empty and tiny datasets.
+  - Projection methods are instance views computed from the currently selected
+    features, so PCA, t-SNE, UMAP, MDS, and Pair can be launched after selecting
+    features in any feature graph layout.
+  - The projection panel now explains when a projection cannot be rendered
+    because no dataset is open, fewer than two features are selected, or no
+    projection points were returned.
 
 - **Local XAI feature scoring**
   - Adds a CPU-first backend XAI pipeline that works on existing uploaded
@@ -171,9 +180,13 @@ This file tracks the lightweight extensions and performance work added on top of
     features, and switching to a SHAP similarity graph when SHAP data exists.
   - Existing feature relevance graph modes remain available; XAI is an
     alternate node metric rather than a replacement for the original GFF graph.
-  - XAI color/size/threshold and SHAP similarity are displayed as Force graph
-    overlays. Other feature layouts remain available for their original graph
-    analyses, but they do not create separate XAI charts.
+  - XAI color, size, and threshold modes are available across the implemented
+    feature layouts when the visual encoding is compatible.
+  - A compact selected-feature XAI summary panel shows selected feature names,
+    model importance, permutation importance, optional SHAP scores, threshold
+    status, and rank bars.
+  - SHAP similarity is displayed as a Force graph link overlay because it is a
+    feature-feature similarity network derived from SHAP contribution profiles.
 
 ## Performance And Lightweight Work
 
@@ -189,6 +202,10 @@ This file tracks the lightweight extensions and performance work added on top of
 
 - **Adaptive projection fallback**
   - Very large instance counts automatically use PCA instead of expensive exact t-SNE/MDS/UMAP-style paths.
+  - The backend records `projectionrequested`, `projectionused`, and an optional
+    `projectionfallback` reason so the UI can explain automatic substitutions.
+  - UMAP reports when the `umap-learn` path is unavailable and a scikit-learn
+    spectral/PCA fallback is used.
 
 - **Lightweight interaction mode**
   - PCA is now the default instance projection because it is fast and suitable for interactive feature selection.
@@ -230,10 +247,16 @@ This file tracks the lightweight extensions and performance work added on top of
   - Quantization is left as a future hook only; the current implementation uses
     sklearn tree models, not local neural or LLM models.
 
+- **Projection status and XAI selection feedback**
+  - The projection panel now displays direct messages for missing datasets,
+    insufficient selected features, empty projection results, and backend
+    fallback paths.
+  - Changing the projection dropdown updates the status panel immediately.
+  - The XAI selected-feature panel updates whenever feature selection, XAI mode,
+    threshold, or XAI results change.
+
 ## Planned
 
-- UI hint in the instance panel showing when a projection was automatically
-  switched to a faster method (e.g. t-SNE → PCA for large datasets).
 - Expose the row-sampling cap (`max_rows=5000` in `proximitymatrix_cols` and
   the ExtraTrees fit) as a user-visible setting for power users who need finer
   control over accuracy vs. speed.
@@ -307,6 +330,8 @@ Done:
 5. Adds threshold filtering from XAI importance.
 6. Adds a **SHAP Similarity Graph** mode when SHAP explanation profiles exist.
 7. Adds adaptive CPU mode for sample sizes, trees, permutation repeats, SHAP sample size, and single-process Windows-safe execution.
+8. Adds cross-layout XAI importance styling where the graph layout has a compatible visual channel.
+9. Adds a selected-feature XAI summary panel with importance, permutation, optional SHAP, and rank bars.
 
 Next:
 

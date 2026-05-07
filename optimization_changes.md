@@ -518,6 +518,12 @@ can hit Windows permission errors in restricted environments.
   show SHAP similarity links when present.
 - `chart_force` now routes node colour, size, tooltip, and threshold selection
   through a node metric helper, preserving the original relevance graph mode.
+- The shared node metric helper now feeds the other implemented feature
+  layouts where a compatible visual channel exists: Bundle, Sunburst, Circle
+  Pack, Heatmap, Community, Bipartite, and UpSet.
+- A compact selected-feature summary panel ranks the current selection by XAI
+  importance and shows model importance, permutation importance, optional SHAP
+  values, and threshold status.
 
 ### MNIST smoke
 Default XAI on `MNIST-10000-784`:
@@ -528,6 +534,42 @@ Default XAI on `MNIST-10000-784`:
 - adaptive mode: `balanced`
 - permutation status: `ok`
 - SHAP: skipped gracefully when `shap` is not installed
+
+---
+
+## 23. `sourcecode/src/vx/gff/MakeProjection.py`, `UMAPP.py`, and projection UI feedback
+
+### Problem
+Instance projection methods such as UMAP, PCA, t-SNE, and MDS are computed
+from selected features, so they can be launched after selecting features in
+any feature graph. The UI did not explain that relationship clearly. When too
+few features were selected, the projection panel could simply stay blank, and
+backend fallbacks such as UMAP unavailable -> spectral/PCA were not surfaced.
+
+The selected-feature XAI display was also vague: the user could see that
+features were selected, but not how those selected features ranked under the
+current local XAI model.
+
+### Fix
+- Added projection panel messages for missing datasets, fewer than two
+  selected features, empty projection results, and backend fallback paths.
+- `MakeProjection` now persists `projectionrequested`, `projectionused`, and
+  optional `projectionfallback` metadata in `instance.obj`.
+- `UMAPP` exposes a fallback reason when `umap-learn` is unavailable or fails
+  and the scikit-learn spectral/PCA path is used.
+- The projection dropdown updates the status panel immediately, while expensive
+  non-PCA projections still require the explicit execute button.
+- Added a compact XAI selected-feature panel with ranked bars and raw scores
+  for model importance, permutation importance, and optional SHAP values.
+
+### Behaviour
+| Case | UI response |
+|---|---|
+| No dataset open | Projection panel says a dataset must be opened first |
+| Fewer than two selected features | Projection panel asks for at least two selected features |
+| UMAP unavailable | Projection still renders via spectral/PCA fallback and shows the reason |
+| Large t-SNE/MDS/UMAP request | Projection falls back to PCA and reports the adaptive CPU limit |
+| XAI scores exist | Selected features are ranked with importance/permutation/SHAP columns |
 
 ---
 
@@ -559,10 +601,10 @@ Default XAI on `MNIST-10000-784`:
 | `TestFeatureGraphIntegration` | MST+Correlation/Pearson/Extratrees: node count, link count, tree present, treehi, edgehist length |
 | `TestProjectionPipeline` | PCA/MDS/t-SNE/simple: point count and finite values |
 
-Together with the 11 smoke tests, including the XAI query/persistence smoke
-test, the full suite is **63 tests, all passing** in under 5 seconds.
+Together with the runtime smoke tests, including the XAI query/persistence
+smoke test, the full suite is **64 tests, all passing** in under 5 seconds.
 
 ```
-Ran 63 tests in 1.6s
+Ran 64 tests in 1.6s
 OK
 ```

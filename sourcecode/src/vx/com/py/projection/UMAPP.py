@@ -23,6 +23,7 @@ class UMAPP(Projection):
         self.X = X
         self.p = p
         self.proxtype = proxtype
+        self.fallback_reason = ""
         super().__init__(X,p)
 
     def execute(self):
@@ -53,7 +54,10 @@ class UMAPP(Projection):
                 ).fit_transform(X)
                 return X2.tolist();
             except Exception as exc:
+                self.fallback_reason = "UMAP failed; spectral/PCA fallback was used: {}".format(str(exc))
                 print("UMAP failed; using spectral fallback:", exc)
+        else:
+            self.fallback_reason = "UMAP is unavailable on this Python version; spectral/PCA fallback was used"
 
         Xwork = normalize(X) if self.proxtype == "cosine" else X
         try:
