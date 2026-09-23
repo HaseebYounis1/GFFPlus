@@ -238,13 +238,14 @@ class XAIPipeline:
         X = frame.loc[:, feature_columns].apply(pd.to_numeric, errors="coerce")
         y = pd.to_numeric(frame.loc[:, target_column], errors="coerce")
 
-        valid = y.notna().to_numpy()
+        valid = np.isfinite(y.to_numpy(dtype=float))
         if valid.size and not np.all(valid):
             X = X.loc[valid, :]
             y = y.loc[valid]
 
         X_values = X.to_numpy(dtype=np.float32, copy=True)
-        if np.isnan(X_values).any():
+        if not np.isfinite(X_values).all():
+            X_values[~np.isfinite(X_values)] = np.nan
             medians = np.nanmedian(X_values, axis=0)
             medians = np.where(np.isfinite(medians), medians, 0.0)
             bad_rows, bad_cols = np.where(~np.isfinite(X_values))

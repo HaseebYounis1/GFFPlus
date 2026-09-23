@@ -313,7 +313,7 @@ function GraphFromFeatures() {
             self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
         }
 
-        if (gvalue('projection') == "simple") {
+        if (gvalue('projection') == "simple" && !gvalue("submodular_size")) {
             if (self.dataload && self.dataload.length > 0) {
                 self.plotpaiercorrelate();
             }
@@ -679,6 +679,12 @@ function GraphFromFeatures() {
         var layout = ds.layoutinstance || {};
         var requested = layout.projectionrequested || "";
         var used = layout.projectionused || "";
+        if (layout.sampling) {
+            self.setProjectionPanelStatus("Projection: " + used.toUpperCase(),
+                "Submodular shortlist: " + layout.sampling.selected_rows + " of " +
+                layout.sampling.original_rows + " rows. " + (layout.projectionfallback || ""));
+            return true;
+        }
         if (requested && used && requested != used) {
             var reason = layout.projectionfallback ||
                 (requested.toUpperCase() + " was replaced by " + used.toUpperCase() + " for this dataset");
@@ -922,6 +928,7 @@ function GraphFromFeatures() {
             ob.in.argms["intarget"] = self.intarget;
             ob.in.argms["proximity"] = gvalue('proximity');
             ob.in.argms["instanceproximity"] = gvalue('instanceproximity');
+            ob.in.argms["submodular_size"] = gvalue("submodular_size");
             ob.in.argms["relevance"] = gvalue('relevance');
             ob.in.argms["algorithm"] = gvalue('algorithm');
             ob.in.argms["layout"] = gvalue('layout');
@@ -977,6 +984,7 @@ function GraphFromFeatures() {
             ob.in.argms["intarget"] = self.intarget;
             ob.in.argms["proximity"] = gvalue('proximity');
             ob.in.argms["instanceproximity"] = gvalue('instanceproximity');
+            ob.in.argms["submodular_size"] = gvalue("submodular_size");
             ob.in.argms["relevance"] = gvalue('relevance');
             ob.in.argms["algorithm"] = gvalue('algorithm');
             ob.in.argms["layout"] = gvalue('layout');
@@ -998,7 +1006,7 @@ function GraphFromFeatures() {
             if (ob.in.argms["projection"] == "mst") {
 
             }
-            else if (ob.in.argms["projection"] == "simple") {
+            else if (ob.in.argms["projection"] == "simple" && !ob.in.argms["submodular_size"]) {
                 MOPRO.show("simple projection");
                 self.loadfilecsv(function () {
                     self.plotpaiercorrelate();
@@ -1371,6 +1379,7 @@ function GraphFromFeatures() {
                 if ("projection" in conf) {
                     gelem('projection').value = conf["projection"];
                 }
+                gelem("submodular_size").value = conf.submodular_size || "";
                 if ("instanceproximity" in conf) {
                     gelem('instanceproximity').value = conf["instanceproximity"];
                 }

@@ -15,7 +15,7 @@ class MDSP(Projection):
         super().__init__(X, p)
 
     def execute(self):
-        X = np.asarray(self.X, dtype=np.float32)
+        X = np.asarray(self.X, dtype=np.float64)
         if X.ndim == 1:
             X = X.reshape((-1, 1))
         n = X.shape[0]
@@ -31,8 +31,8 @@ class MDSP(Projection):
 
         # Precompute the full Euclidean distance matrix with a single BLAS
         # matrix multiply — avoids sklearn recomputing distances internally.
-        sq = (X ** 2).sum(axis=1)
-        D  = np.sqrt(np.maximum(sq[:, None] + sq[None, :] - 2.0 * (X @ X.T), 0.0))
+        from scipy.spatial.distance import cdist
+        D = cdist(X, X)
         np.fill_diagonal(D, 0.0)
         if not np.any(D):
             return np.zeros((n, 2), dtype=float).tolist()

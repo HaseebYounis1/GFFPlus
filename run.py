@@ -14,4 +14,7 @@ from vx.gff.Server import Server
 
 
 if __name__ == "__main__":
-    Server.execute()
+    try:
+        Server.execute()
+    except KeyboardInterrupt:
+        print("\nServer stopped.")

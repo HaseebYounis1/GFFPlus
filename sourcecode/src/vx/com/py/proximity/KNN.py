@@ -1,47 +1,35 @@
-import heapq
+"""Exact nearest neighbours with bounded distance working memory."""
+import operator
 import numpy as np
-from time import process_time
+from scipy.spatial.distance import cdist
 
-from vx.com.py.proximity.Proximity import *
 
 class KNN:
-
-    def __init__(self):
-        pass
-
     @staticmethod
     def execute(nneighbors, X, proxtype):
-        start = process_time()
+        k = operator.index(nneighbors)
+        if k < 0:
+            raise ValueError("nneighbors must be nonnegative")
+        if proxtype not in ("euclidean", "cosine"):
+            raise ValueError("Unsupported neighbour metric: {}".format(proxtype))
         n = len(X)
         if n == 0:
             return []
-
         arr = np.asarray(X, dtype=float)
-        # Vectorised pairwise Euclidean (only metric currently used)
-        if proxtype == "euclidean":
-            sq = (arr ** 2).sum(axis=1)
-            dots = arr @ arr.T
-            sq_dists = np.maximum(sq[:, None] + sq[None, :] - 2.0 * dots, 0.0)
-            dist_matrix = np.sqrt(sq_dists)
-        else:
-            dist_matrix = np.zeros((n, n), dtype=float)
-            for i in range(n):
-                for j in range(i + 1, n):
-                    d = Proximity.compute(X[i], X[j], proxtype)
-                    dist_matrix[i, j] = d
-                    dist_matrix[j, i] = d
-
-        k = min(nneighbors, n - 1)
-        ner = []
-        for i in range(n):
-            row = dist_matrix[i]
-            idx = np.argpartition(row, range(1, k + 1))[:k + 1]
-            idx = idx[idx != i][:k]
-            idx = idx[np.argsort(row[idx])]
-            ner.append([[int(j), float(row[j])] for j in idx])
-
-        end = process_time()
-        print("time KNN: {:.5f}".format(end - start))
-        return ner
-
-
+        if arr.ndim != 2 or not np.isfinite(arr).all():
+            raise ValueError("X must be a finite 2-D matrix")
+        k = min(k, n - 1)
+        if k == 0:
+            return [[] for _ in range(n)]
+        result = []
+        block = max(1, min(256, 1000000 // n))
+        for start in range(0, n, block):
+            distances = cdist(arr[start:start + block], arr, metric=proxtype)
+            distances = np.nan_to_num(distances, nan=1.0)
+            for offset, row in enumerate(distances):
+                row[start + offset] = np.inf
+                # Stable sorting makes ties deterministic and excludes self even
+                # when several observations have identical coordinates.
+                ids = np.argsort(row, kind="stable")[:k]
+                result.append([[int(j), float(row[j])] for j in ids])
+        return result

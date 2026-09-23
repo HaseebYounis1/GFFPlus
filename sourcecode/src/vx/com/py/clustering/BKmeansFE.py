@@ -5,6 +5,7 @@
 # E-mail: lizhh@usp.br
 
 
+import numpy as np
 import math
 import random
 
@@ -117,6 +118,7 @@ class BKmeansFE:
             BKmeansFE.computeMean(X, clus1, centroids, ck1)
             BKmeansFE.computeMean(X, clus2, centroids, ck2)
 
+            previous = (clus1, clus2)
             clus1 = []
             clus2 = []
 
@@ -143,7 +145,7 @@ class BKmeansFE:
 
             #print(it)
             it = it+1
-            if not it < max_iter:
+            if (clus1, clus2) == previous or not it < max_iter:
                 break;
             
         BKmeansFE.computeMean(X, clus1, centroids, ck1)
@@ -157,6 +159,10 @@ class BKmeansFE:
     @staticmethod
     def execute(X=None, k=2, proxtype=0, max_iter=15, verbose=False):
 
+        if not isinstance(k, (int, np.integer)) or not 1 <= k <= X.rows():
+            raise ValueError("k must be between one and the row count")
+        if max_iter < 1:
+            raise ValueError("max_iter must be positive")
         start = process_time()
 
         clusters = [ Cluster( [ i for i in range(X.rows())], 0 ) ]
@@ -164,7 +170,7 @@ class BKmeansFE:
         centroids = DataMatrix()
         centroids.create(k*2, X.cols())
 
-        centroids.copyrow(0, X, 0)
+        BKmeansFE.computeMean(X, clusters[0].cluster, centroids, 0)
         ik = 0
         while len(clusters) < k:
             ci = BKmeansFE.getCluster2Split(clusters)

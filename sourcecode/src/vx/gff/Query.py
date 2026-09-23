@@ -255,6 +255,7 @@ class Query(BaseHandler):
             "intarget",
             "featureselected",
             "idinstanceslabels",
+            "submodular_size",
         ]
         re = list(DBX.find(DBS.DBGFF, "data", {"_id":idin}))
         for row in re:

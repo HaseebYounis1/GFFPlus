@@ -76,7 +76,7 @@ class BKmeans:
     @staticmethod
     def computeMean(X, cluster):
         if not cluster:
-            return [0.0] * (len(X[0]) if X else 0)
+            return [0.0] * (len(X[0]) if len(X) else 0)
         arr = np.array([X[i] for i in cluster], dtype=float)
         return arr.mean(axis=0).tolist()
 
@@ -110,6 +110,7 @@ class BKmeans:
             cent1 = BKmeans.computeMean(X, clus1)
             cent2 = BKmeans.computeMean(X, clus2)
 
+            previous = (clus1, clus2)
             clus1 = []
             clus2 = []
 
@@ -137,7 +138,7 @@ class BKmeans:
             
             it = it+1
             #print(ci, it, len(clusters),)
-            if not it < max_iter:
+            if (clus1, clus2) == previous or not it < max_iter:
                 break;
             
         #Add the two new clusters
@@ -157,10 +158,14 @@ class BKmeans:
         # XFE selectrows
 
 
+        if not isinstance(k, (int, np.integer)) or not 1 <= k <= len(X):
+            raise ValueError("k must be between one and the row count")
+        if max_iter < 1:
+            raise ValueError("max_iter must be positive")
         start = process_time()
         initcluster = [ i for i in range(len(X))]
         clusters = [initcluster]
-        centroids = [ X[initcluster[0]] ]
+        centroids = [BKmeans.computeMean(X, initcluster)]
 
         while len(clusters) < k:
             ci = BKmeans.getCluster2Split(clusters)

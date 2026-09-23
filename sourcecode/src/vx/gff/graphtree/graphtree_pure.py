@@ -201,8 +201,12 @@ class Graph:
         N = X.cols()
         max_whole_edges = int(argms.get("maxwholeedges", Graph.MAX_WHOLE_EDGES))
         # NJ is O(n³): cap to prevent multi-minute hangs on wide datasets
+        self.data["algorithmrequested"] = algorithm
+        self.data.pop("algorithmfallback", None)
         if algorithm == "nj" and N > 300:
             algorithm = "mst"
+            self.data["algorithmfallback"] = "NJ exceeds the 300-feature limit; MST was used"
+        self.data["algorithmused"] = algorithm
         pm_t = X.proximitymatrix_cols(pmetric)
         prox_types = ProximityMatrix.POT
         coeffx = pm_t.getCoefficient()

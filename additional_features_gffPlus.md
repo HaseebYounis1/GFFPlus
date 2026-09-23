@@ -2,6 +2,17 @@
 
 This file tracks the lightweight extensions and performance work added on top of the original GFF application.
 
+## Submodular shortlisting and algorithm audit
+
+- Added bounded-memory facility-location shortlisting based on the supplied
+  `submodular_efficient_(1).py` experiment, with deterministic stochastic greedy
+  selection, a projection **Representative rows** control, and a CSV CLI for
+  rows or features.
+- Fixed sampling, bisecting k-means, KNN, MDS, UMAP fallback, projection state
+  and XAI nonfinite-input handling; added regression coverage.
+- See [ALGORITHM_AUDIT.md](ALGORITHM_AUDIT.md) for usage, the precise objective,
+  validation and remaining algorithm limitations.
+
 ## Bug Fixes
 
 - **Bipartite graph stuck on "get unselected features"**

@@ -24,9 +24,12 @@ class UMAPP(Projection):
         self.p = p
         self.proxtype = proxtype
         self.fallback_reason = ""
+        self.projection_used = "umap"
         super().__init__(X,p)
 
     def execute(self):
+        self.fallback_reason = ""
+        self.projection_used = "umap"
         X = np.asarray(self.X, dtype=np.float32)
         if X.ndim == 1:
             X = X.reshape((-1, 1))
@@ -59,6 +62,7 @@ class UMAPP(Projection):
         else:
             self.fallback_reason = "UMAP is unavailable on this Python version; spectral/PCA fallback was used"
 
+        self.projection_used = "spectral"
         Xwork = normalize(X) if self.proxtype == "cosine" else X
         try:
             X2 = SpectralEmbedding(
@@ -68,5 +72,7 @@ class UMAPP(Projection):
                 affinity="nearest_neighbors",
             ).fit_transform(Xwork)
         except Exception:
-            X2 = PCA(n_components=self.p, random_state=7).fit_transform(Xwork)
+            from vx.com.py.projection.PCAP import PCAP
+            self.projection_used = "pca"
+            X2 = np.asarray(PCAP(Xwork, p=self.p).execute())
         return X2.tolist();

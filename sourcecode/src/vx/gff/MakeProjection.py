@@ -35,6 +35,7 @@ class MakeProjection():
         self.data = {"points":[],"tartegscolors":[],"tartegsnames":{}}
 
     def execute(self, argms):
+        self.data = {"points": [], "tartegscolors": [], "tartegsnames": {}}
         mt = argms["projection"]
         projprox = argms["instanceproximity"]
 
@@ -108,6 +109,18 @@ class MakeProjection():
 
         #y = dmat.sample(smp_cols=[target]).getData()
 
+        havzeroless = 0 if np.any(yt == 0) else 1
+        row_ids = np.arange(X.shape[0])
+        sample_size = argms.get("submodular_size")
+        if sample_size not in (None, ""):
+            from vx.com.py.sampling.Submodular import shortlist
+            row_ids = np.asarray(shortlist(X, min(int(sample_size), len(X)),
+                                           metric="cosine" if projprox == "DCosine" else "euclidean"), dtype=int)
+            X = X[row_ids]
+            yt = yt[row_ids]
+            XR = XR.selectrows(row_ids.tolist())
+            self.data["sampling"] = {"method": "submodular", "original_rows": XDF.rows(),
+                                     "selected_rows": len(row_ids), "seed": 7}
         N = X.shape[0]
 
         X2 = []
@@ -152,7 +165,7 @@ class MakeProjection():
                 projector = UMAPP(X, proxtype=metric)
                 X2 = projector.execute();
                 if projector.fallback_reason:
-                    projection_used = "spectral"
+                    projection_used = projector.projection_used
                     if not fallback_reason:
                         fallback_reason = projector.fallback_reason
             elif mt == "mds":
@@ -201,7 +214,6 @@ class MakeProjection():
         #     X2 = LSP(X, smpprj=UMAPP(), smptype="clusteringmedoids").execute()
 
 
-        havzeroless = 0 if np.any(yt == 0) else 1
         yt = yt - havzeroless
 
         targetsnames = {int(yi): int(yi) for yi in np.unique(yt)}
@@ -210,7 +222,7 @@ class MakeProjection():
             try:
                 target_y = pd.read_csv(ofile, usecols=[target], dtype=str).iloc[:, 0].tolist()
                 for i in range(min(len(yt), len(target_y))):
-                    targetsnames[int(yt[i])] = target_y[i]
+                    targetsnames[int(yt[i])] = target_y[int(row_ids[i])]
             except Exception as exc:
                 print("Could not load original target labels:", exc)
 
@@ -225,7 +237,7 @@ class MakeProjection():
 
         for i in range(N):
             self.data["points"].append({
-                "id": i,
+                "id": int(row_ids[i]),
                 "x": float(X2[i][0]),
                 "y": float(X2[i][1]),
                 "t": int(yt[i]),

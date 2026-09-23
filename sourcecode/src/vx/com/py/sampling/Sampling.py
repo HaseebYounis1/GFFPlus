@@ -15,16 +15,16 @@ class Sampling:
     @staticmethod
     def execute(X=None, smsize=None, types=None, proxtype="euclidean"):
         smpid = []
-        clusterscentroids = None        
+        clusterscentroids = None
+        if smsize is None or not 0 <= smsize <= len(X):
+            raise ValueError("sample size must be between zero and the row count")
+        if smsize == 0:
+            return [], None
+        if types == "submodular":
+            from vx.com.py.sampling.Submodular import shortlist
+            return shortlist(X, smsize, metric=proxtype), None
         if types == "random":
-            random.seed(7)
-            e = [ i for i in range(len(X)) ]
-            random.shuffle(e) 
-            for i in e:
-                smpid.append(i)
-                if len(smpid)==smsize:
-                    break
-                
+            smpid = random.Random(7).sample(range(len(X)), smsize)
         elif types == "clusteringmedoids":
             clusters, centroids = BKmeans.execute(X, smsize, proxtype)
             for i in range(len(clusters)):
@@ -33,23 +33,24 @@ class Sampling:
                 idme = BKmeans.computeMedoid(X, cs, ce, proxtype)
                 smpid.append(idme)
             clusterscentroids = (clusters, centroids) 
+        else:
+            raise ValueError("Unknown sampling method: {}".format(types))
         return smpid, clusterscentroids
 
 
     @staticmethod
     def executeFE(X=None, smsize=None, types=None, proxtype=0):
         smpid = []
-        clusterscentroids = None        
-        if types == "random":
-            #random.seed(7)
-            #e = [ i for i in range(len(X)) ]
-            #random.shuffle(e) 
-            #for i in e:
-            #    smpid.append(i)
-            #    if len(smpid)==smsize:
-            #        break
-            pass
-                
+        clusterscentroids = None
+        if smsize is None or not 0 <= smsize <= X.rows():
+            raise ValueError("sample size must be between zero and the row count")
+        if smsize == 0:
+            return [], None
+        if types in ("random", "submodular"):
+            if types == "submodular" and proxtype not in (0, 5):
+                raise ValueError("submodular sampling supports Euclidean and cosine")
+            return Sampling.execute(X._data, smsize, types,
+                                    "cosine" if proxtype == 5 else "euclidean")
         elif types == "clusteringmedoids":
             clusters, centroids = BKmeansFE.execute(X, smsize, proxtype)
             for clu in clusters:
@@ -58,4 +59,6 @@ class Sampling:
                 clu.medoid = BKmeansFE.computeMedoid(X, cs, centroids, ce, proxtype)
                 smpid.append(clu.medoid)
             clusterscentroids = (clusters, centroids) 
+        else:
+            raise ValueError("Unknown sampling method: {}".format(types))
         return smpid, clusterscentroids
