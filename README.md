@@ -17,6 +17,85 @@ Verify whether the following software is installed:
 * Open: `http://localhost:8000/`
 * Please login with user: `localuser` and password: `gff`
 
+## Clone and run on another Windows computer
+
+Install Git and Anaconda or Miniconda, then open **Anaconda Prompt**.
+
+### First-time setup on the advancements branch
+
+```sh
+git clone --branch advancements https://github.com/HaseebYounis1/GFFPlus.git
+cd GFFPlus
+
+conda create -n GFF python=3.11 -y
+conda activate GFF
+
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python run.py
+```
+
+Open `http://localhost:8000/`, or the address printed in the terminal if that
+port is already in use. Log in with username `localuser` and password `gff`.
+Keep the terminal open while using the application; press **Ctrl+C** to stop it.
+
+A separate MongoDB installation is unnecessary: the application stores its
+database locally in JSON. Cloning transfers the code and included datasets;
+datasets uploaded locally on another computer are not automatically transferred.
+
+### Run it again later
+
+Open Anaconda Prompt and replace the example path with your clone's location:
+
+```bat
+cd /d "C:\path\to\GFFPlus"
+conda activate GFF
+python run.py
+```
+
+### Switch an existing clone to advancements and update it
+
+Stop the server with **Ctrl+C**, open a terminal in the repository folder, and
+activate the environment. Check for local changes before switching; commit or
+stash changes you want to keep if Git reports that they would be overwritten.
+
+```sh
+conda activate GFF
+git status
+git fetch origin
+git branch -a
+git switch advancements
+git pull --ff-only origin advancements
+
+python -m pip install -r requirements.txt
+python run.py
+```
+
+If the branch does not exist locally and `git switch advancements` cannot
+resolve it, create a local branch tracking the remote branch, then continue
+with the pull and installation commands above:
+
+```sh
+git switch --track origin/advancements
+```
+
+To switch to another branch, stop the server and replace `BRANCH_NAME` with
+a name listed by `git branch -a` (without the `remotes/origin/` prefix):
+
+```sh
+git switch BRANCH_NAME
+```
+
+Follow that branch's README for its dependencies and startup instructions.
+
+### Optional SHAP support
+
+With the `GFF` environment active, install the optional explainability packages:
+
+```sh
+python -m pip install -r requirements-xai.txt
+```
+
 ## Optional XAI / ML environment
 The default local XAI pipeline is CPU-first and runs with the base
 `requirements.txt` stack. It uses sklearn ExtraTrees models to compute feature
