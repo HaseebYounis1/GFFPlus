@@ -40,8 +40,10 @@ class MongoDB:
         try:
             with MongoDB._dbfile.open("r", encoding="utf-8") as fp:
                 data = json.load(fp)
-        except json.JSONDecodeError:
-            data = MongoDB._empty()
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Database JSON is damaged; restore localdb.json from a backup. Writes are stopped.") from exc
+        if not isinstance(data, dict) or any(not isinstance(data.get(k), list) for k in ("user", "data")):
+            raise RuntimeError("Database structure is damaged; writes are stopped")
         for collection in ("user", "data"):
             data.setdefault(collection, [])
         return data

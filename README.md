@@ -96,6 +96,39 @@ With the `GFF` environment active, install the optional explainability packages:
 python -m pip install -r requirements-xai.txt
 ```
 
+## Large datasets and local data safety
+
+Upload a CSV or a ZIP containing one CSV through the upload button. The server
+streams it to disk and automatically selects a representative working sample;
+you do not need to enter a percentage. The sample budget adapts to column count
+(up to 3,000 rows), and graphs, projections and previews use the smaller data.
+The upload result reports original and retained counts.
+
+The complete CSV remains in `data/gff/<dataset-id>/original.csv`. Selected
+records keep their original row IDs. Selection approximates dataset coverage;
+it cannot guarantee preserving every rare pattern. At upload time the last
+column is treated as the provisional target, with one example retained per
+class when there are at most 100 distinct values and the budget permits.
+The **Further reduce rows** control is optional. Uploads and uncompressed ZIP
+contents are limited to 10 GiB; sufficient disk space is still required.
+
+Existing datasets are not overwritten. Their loaders now sample across the
+file instead of using a prefix; rerun existing graphs and XAI to refresh cached
+results. XAI permutation scores use held-out rows, and small datasets report
+when there are too few rows for independent evaluation.
+
+The app binds to localhost and uses one server process on all platforms. Run
+only one instance per data directory. Dataset changes require ownership or
+administrator access; shared datasets can be viewed or cloned by other users.
+Requests that change data use POST and an XSRF token supplied by the browser.
+After upgrading, log in again: the old shared session-signing secret has been
+replaced by a generated local secret.
+
+If `localdb.json` is malformed, writes stop instead of resetting the database.
+Keep a backup of `data/gff/`; preserve a damaged file and restore the metadata
+from your backup before restarting. See [ALGORITHM_AUDIT.md](ALGORITHM_AUDIT.md)
+for implementation details and remaining algorithm limits.
+
 ## Optional XAI / ML environment
 The default local XAI pipeline is CPU-first and runs with the base
 `requirements.txt` stack. It uses sklearn ExtraTrees models to compute feature

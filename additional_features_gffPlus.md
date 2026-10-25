@@ -2,6 +2,18 @@
 
 This file tracks the lightweight extensions and performance work added on top of the original GFF application.
 
+## October 2026 audit fixes
+
+- Added authenticated, ownership-checked dataset operations and downloads,
+  POST/XSRF protection, safe deletion paths and localhost-only binding.
+- Stop writes on damaged JSON metadata and use one server process on every OS.
+- Stream uploads to disk and automatically build a bounded representative
+  working dataset, keeping the full CSV and original row IDs on disk.
+- Sample across entire older datasets; evaluate XAI on held-out rows and run
+  its work in a bounded background executor.
+- Preserve continuous projection targets, sample labels and exported row IDs.
+- See [ALGORITHM_AUDIT.md](ALGORITHM_AUDIT.md) for validation and limitations.
+
 ## Submodular shortlisting and algorithm audit
 
 - Added bounded-memory facility-location shortlisting based on the supplied

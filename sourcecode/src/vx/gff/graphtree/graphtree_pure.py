@@ -18,7 +18,8 @@ sys.setrecursionlimit(100000)
 
 
 
-from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
+from sklearn.utils.multiclass import type_of_target
 
 #from xgboost import XGBClassifier
 
@@ -285,7 +286,8 @@ class Graph:
 
                 xt = XR._data
                 yt = np.array(yt)
-                modelt = ExtraTreesClassifier(n_estimators=50, random_state=7, n_jobs=-1)
+                model_class = ExtraTreesRegressor if type_of_target(yt) == "continuous" else ExtraTreesClassifier
+                modelt = model_class(n_estimators=50, random_state=7, n_jobs=1)
                 n_rows = xt.shape[0]
                 if n_rows > 5000:
                     rng = np.random.default_rng(42)

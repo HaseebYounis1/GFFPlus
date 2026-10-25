@@ -17,7 +17,7 @@ class Settings:
     TEMPLATE_PATH = os.path.join(DIRNAME, './templates')
     DATA_PATH = os.path.join(DIRNAME, '../../../../data/gff/')
 
-    COOKIE_SECRET = 'L8LwECiNRxdq2N0N2eGxx9MZlrpmuMEimlydNX/vt1LM='
+    COOKIE_SECRET = None
 
     HOST = 'localhost'
     PORT = 8000

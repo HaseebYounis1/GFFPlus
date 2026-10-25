@@ -10,6 +10,8 @@ import pandas as pd
 from sklearn.ensemble import ExtraTreesClassifier, ExtraTreesRegressor
 from sklearn.inspection import permutation_importance
 from sklearn.utils.multiclass import type_of_target
+from sklearn.model_selection import train_test_split
+from vx.com.py.sampling.CSVSample import sample_csv
 
 
 RANDOM_STATE = 42
@@ -76,21 +78,31 @@ class XAIPipeline:
         total_rows = max(0, _count_csv_rows(csv_path))
         plan = self._make_cpu_plan(total_rows, len(feature_ids), argms)
         frame = self._read_training_frame(csv_path, header, feature_ids, target_id, plan.train_rows)
-        X, y = self._prepare_arrays(frame, header, feature_ids, target_id)
+        X, y = self._prepare_arrays(frame, header, feature_ids, target_id, impute=False)
 
         if X.shape[0] < 2:
             raise ValueError("XAI needs at least two valid data rows after loading.")
 
-        task_type = self._infer_task_type(y)
+        task_type = argms.get("targettype")
+        if task_type not in ("regression", "classification"):
+            task_type = self._infer_task_type(y)
         if task_type == "classification" and np.unique(y).size < 2:
             raise ValueError("Classification XAI needs at least two target classes.")
 
-        model = self._fit_model(X, y, task_type, plan)
+        train, evaluation = self._evaluation_split(y, task_type)
+        # Learn missing-value replacements from the training partition only.
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            medians = np.nanmedian(X[train], axis=0)
+        medians = np.where(np.isfinite(medians), medians, 0.0)
+        X = np.where(np.isfinite(X), X, medians)
+        model = self._fit_model(X[train], y[train], task_type, plan)
         importance = _finite_vector(getattr(model, "feature_importances_", np.zeros(X.shape[1])))
         importance_norm = _normalize_nonnegative(importance)
 
         permutation, permutation_norm, permutation_status = self._compute_permutation(
-            model, X, y, plan
+            model, X[evaluation], y[evaluation], plan
         )
         shap_payload = self._compute_shap(model, X, feature_ids, columns, plan, argms)
 
@@ -149,8 +161,10 @@ class XAIPipeline:
             "settings": {
                 "adaptive_cpu": plan.as_dict(),
                 "sampling": {
-                    "training": "first_rows",
-                    "permutation": "deterministic_random_subset",
+                    "training": "uniform_reservoir_training_partition",
+                    "permutation": "held_out_rows",
+                    "training_rows": len(train),
+                    "evaluation_rows": len(evaluation),
                     "shap": "deterministic_random_subset",
                 },
                 "local_only": True,
@@ -223,15 +237,25 @@ class XAIPipeline:
     def _read_training_frame(self, csv_path, header, feature_ids, target_id, train_rows):
         use_ids = sorted(set(feature_ids + [target_id]))
         use_columns = [header[index] for index in use_ids]
-        return pd.read_csv(
-            csv_path,
-            delimiter=",",
-            encoding="utf-8-sig",
-            usecols=use_columns,
-            nrows=max(2, int(train_rows)),
-        )
+        frame, _, _ = sample_csv(csv_path, max(2, int(train_rows)), usecols=use_columns,
+                                 seed=self.random_state, protect_column=header[target_id])
+        return frame
 
-    def _prepare_arrays(self, frame, header, feature_ids, target_id):
+    def _evaluation_split(self, y, task_type):
+        indices = np.arange(len(y))
+        if len(y) < 8:
+            return indices, np.empty(0, dtype=int)
+        stratify = None
+        if task_type == "classification":
+            _, counts = np.unique(y, return_counts=True)
+            test_size = max(2, int(np.ceil(len(y) * 0.25)))
+            if counts.min() < 2 or len(counts) > min(test_size, len(y) - test_size):
+                return indices, np.empty(0, dtype=int)
+            stratify = y
+        return train_test_split(indices, test_size=0.25, random_state=self.random_state,
+                                stratify=stratify)
+
+    def _prepare_arrays(self, frame, header, feature_ids, target_id, impute=True):
         feature_columns = [header[index] for index in feature_ids]
         target_column = header[target_id]
 
@@ -244,8 +268,8 @@ class XAIPipeline:
             y = y.loc[valid]
 
         X_values = X.to_numpy(dtype=np.float32, copy=True)
-        if not np.isfinite(X_values).all():
-            X_values[~np.isfinite(X_values)] = np.nan
+        X_values[~np.isfinite(X_values)] = np.nan
+        if impute and not np.isfinite(X_values).all():
             medians = np.nanmedian(X_values, axis=0)
             medians = np.where(np.isfinite(medians), medians, 0.0)
             bad_rows, bad_cols = np.where(~np.isfinite(X_values))
@@ -286,7 +310,7 @@ class XAIPipeline:
     def _compute_permutation(self, model, X, y, plan):
         if X.shape[0] < 2:
             zeros = np.zeros(X.shape[1], dtype=float)
-            return zeros, zeros, "skipped: not enough rows"
+            return zeros, zeros, "skipped: not enough independent evaluation rows"
 
         try:
             idx = _sample_indices(self.rng, X.shape[0], plan.permutation_rows)

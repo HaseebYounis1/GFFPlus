@@ -17,3 +17,6 @@ python/
 data/gff/localdb.json
 data/gff/localdb.tmp
 data/gff/*/
+
+data/gff/.session-secret
+data/gff/.upload-*

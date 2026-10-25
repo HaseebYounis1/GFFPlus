@@ -7,6 +7,7 @@
 <!DOCTYPE html>
 <html>
     <head>
+<meta name="xsrf-token" content="{{ handler.xsrf_token }}">
         <title>Graphs from Features - GFF</title>
         <meta charset="utf-8">
 <!--        <link href="../lib/buttons.css" rel="stylesheet" type="text/css">
@@ -41,6 +42,7 @@
         <div style="height: 100px;"></div>        
         <div style="width: 300px; margin: 0 auto; background-color: #333; padding: 20px ;">
             <form class="form-signin" action="./login" method="POST">
+                {% module xsrf_form_html() %}
                 <h class="form-signin-heading" style="color: snow;">Please Login</h>
                 <div style="height: 5px;"></div>
                 <input name="user" type="text" class="form-control" placeholder="User / Email Address"

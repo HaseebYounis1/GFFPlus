@@ -114,7 +114,9 @@ function chart_bipartite(idview, selft, vertexcolorf) {
 
         for (var r = 0; r < sampledRows.length; ++r) {
             var row = sampledRows[r].row;
-            var originalIndex = sampledRows[r].index;
+            var previewIndex = sampledRows[r].index;
+            var originalIndex = selft.dataloadids && selft.dataloadids[previewIndex] !== undefined
+                ? selft.dataloadids[previewIndex] : previewIndex;
             var active = [];
             var score = 0;
             for (var f = 0; f < features.length; ++f) {

@@ -11,6 +11,9 @@ import sys
 import importlib.util
 import warnings
 from time import process_time
+from vx.gff.Ingestion import source_ids, sampling_metadata
+from vx.com.py.sampling.CSVSample import read_rows
+from sklearn.utils.multiclass import type_of_target
 
 import numpy as np
 import pandas as pd
@@ -77,7 +80,7 @@ class MakeProjection():
         selected_load_ids = None
         if featureselected:
             selected_load_ids = featureselected + [targeti]
-        XDF = DataMatrix(filefe, selectedfeids=selected_load_ids)
+        XDF = DataMatrix(filefe, selectedfeids=selected_load_ids, max_rows=5000, dtype=np.float64)
         #target_index = XDF.columnindex(target)
 
         colsindexes = XDF.columnsindexes()
@@ -103,24 +106,30 @@ class MakeProjection():
             XR = XDF.selectcolumns_index(local_features)
         else:
             XR = XDF.selectcolumns_index(fenames)
-        yt = XDF.getcolumn_array(targeti_true, copy=True).astype(np.int64, copy=False)
+        yt = XDF.getcolumn_array(targeti_true, copy=True).astype(np.float64, copy=False)
         X = XR._data
         end = process_time()
 
         #y = dmat.sample(smp_cols=[target]).getData()
 
-        havzeroless = 0 if np.any(yt == 0) else 1
-        row_ids = np.arange(X.shape[0])
+        if not np.isfinite(yt).all():
+            raise ValueError("Target contains missing or nonfinite values")
+        local_ids = XDF._row_ids
+        row_ids = source_ids(filefepath, local_ids)
+        metadata = sampling_metadata(filefepath)
+        original_rows = metadata.get("original_rows", XDF._total_rows)
         sample_size = argms.get("submodular_size")
         if sample_size not in (None, ""):
             from vx.com.py.sampling.Submodular import shortlist
-            row_ids = np.asarray(shortlist(X, min(int(sample_size), len(X)),
+            selected = np.asarray(shortlist(X, min(int(sample_size), len(X)),
                                            metric="cosine" if projprox == "DCosine" else "euclidean"), dtype=int)
-            X = X[row_ids]
-            yt = yt[row_ids]
-            XR = XR.selectrows(row_ids.tolist())
-            self.data["sampling"] = {"method": "submodular", "original_rows": XDF.rows(),
-                                     "selected_rows": len(row_ids), "seed": 7}
+            row_ids = row_ids[selected]
+            local_ids = local_ids[selected]
+            X, yt = X[selected], yt[selected]
+            XR = XR.selectrows(selected.tolist())
+        if metadata or sample_size not in (None, "") or original_rows > len(X):
+            self.data["sampling"] = {"method": metadata.get("method", "uniform_reservoir"),
+                                     "original_rows": original_rows, "selected_rows": len(X), "seed": 7}
         N = X.shape[0]
 
         X2 = []
@@ -214,33 +223,36 @@ class MakeProjection():
         #     X2 = LSP(X, smpprj=UMAPP(), smptype="clusteringmedoids").execute()
 
 
-        yt = yt - havzeroless
-
-        targetsnames = {int(yi): int(yi) for yi in np.unique(yt)}
-        ofile = filefepath+"original.csv"
-        if os.path.isfile(ofile):
-            try:
-                target_y = pd.read_csv(ofile, usecols=[target], dtype=str).iloc[:, 0].tolist()
-                for i in range(min(len(yt), len(target_y))):
-                    targetsnames[int(yt[i])] = target_y[int(row_ids[i])]
-            except Exception as exc:
-                print("Could not load original target labels:", exc)
-
+        target_type = argms.get("targettype")
+        if target_type not in ("regression", "classification"):
+            target_type = "regression" if type_of_target(yt) == "continuous" else "classification"
+        values = yt.copy()
+        targetsnames = {}
+        if target_type == "classification":
+            categories, yt = np.unique(yt, return_inverse=True)
+            targetsnames = {i: str(value) for i, value in enumerate(categories)}
+            working = filefepath + "working.csv"
+            original = filefepath + "original.csv"
+            if os.path.isfile(working):
+                labels = read_rows(working, local_ids, usecols=[targeti])
+            elif os.path.isfile(original):
+                labels = read_rows(original, row_ids, usecols=[targeti])
+            else:
+                labels = None
+            if labels is not None:
+                for code, label in zip(yt, labels):
+                    targetsnames[int(code)] = label[0]
+        self.data["targettype"] = target_type
+        self.data["targetrange"] = [float(values.min()), float(values.max())] if len(values) else [0, 0]
         self.data["tartegsnames"] = targetsnames
-        # cma = plt.cm.get_cmap('rainbow')
-#        colors = cma(np.linspace(0, 1))
-#        colors = colors.tolist()
-        
-        # print("ytytytytytytytytytyt",len(yt))
-        # print("target_nmesy",len(target_y))
-
 
         for i in range(N):
             self.data["points"].append({
                 "id": int(row_ids[i]),
                 "x": float(X2[i][0]),
                 "y": float(X2[i][1]),
-                "t": int(yt[i]),
+                "t": float(yt[i]) if target_type == "regression" else int(yt[i]),
+                "targetvalue": float(values[i]),
             })
 
         del XDF

@@ -6,6 +6,7 @@
 
 <!DOCTYPE html>
 <meta charset="utf-8">
+<meta name="xsrf-token" content="{{ handler.xsrf_token }}">
 <title>Graphs from Features - GFF</title>
 
 
@@ -1292,10 +1293,10 @@
                                                         </select>
                                                     </td>
                                                     <td>
-                                                        <label for="submodular_size">Representative rows</label>
+                                                        <label for="submodular_size">Further reduce rows</label>
                                                         <input id="submodular_size" type="number" min="1" step="1"
-                                                            class="form-control form-control-sm" placeholder="All rows"
-                                                            title="Optional maximum rows selected by submodular coverage. Press Execute to apply.">
+                                                            class="form-control form-control-sm" placeholder="Automatic"
+                                                            title="Uploads are sampled automatically. Optionally reduce the working sample further; press Execute to apply.">
                                                     </td>
                                                     <td>
                                                         <select id="idinstanceslabels" 

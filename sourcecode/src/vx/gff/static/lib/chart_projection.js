@@ -47,6 +47,14 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
     var data = Array.isArray(layoutinstance.points) ? layoutinstance.points : [];
     var targetNames = layoutinstance.tartegsnames || {};
     var targetsize = Math.max(1, Object.keys(targetNames).length);
+    function targetColor(value) {
+        if (layoutinstance.targettype === "regression") {
+            var range = layoutinstance.targetrange || [0, 1];
+            return self.projectioncolorf(range[1] > range[0] ?
+                (value - range[0]) / (range[1] - range[0]) : 0.5);
+        }
+        return self.projectioncolorf(value / targetsize);
+    }
 
     d3.select(idview).selectAll("svg").remove();
     gelem(argms["infleft"]).innerHTML = "TOTAL: " + data.length;
@@ -196,7 +204,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         .style('stroke', 'white')
         .style('stroke-width', sizebr)
         .style("fill", function (d) {
-            return self.projectioncolorf(d.t/(targetsize)); 
+            return targetColor(d.t);
             //return d3.color(cValue(d.t)).darker(); 
 
             })
@@ -258,7 +266,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         
         self.nodesc
         .style("fill", function (d) {
-            return self.projectioncolorf(d.t/(targetsize));
+            return targetColor(d.t);
         })
         .style("stroke", function (d) {
             return "#fff";
@@ -276,7 +284,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
     this.exwholeinstancesprj = function() {
         var txtex = "DY\n"+data.length+"\n2\nx;y\n";
         for (var i in data){
-            txtex += selfgff.getInstanceLabel(i)+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
+            txtex += selfgff.getInstanceLabel(data[i].id)+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
         }
         var hiddenElement = document.createElement('a');
         hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);
@@ -291,9 +299,11 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
 
     this.exselectedinstancesprj = function() {
         if (self.selected.length>0){        
-            var txtex = "DY\n"+self.selected.length+"\n2\nx;y\n";
-            for (var i of self.selected){
-                txtex += selfgff.getInstanceLabel(i)+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
+            var ids = new Set(self.selected);
+            var selectedPoints = data.filter(function (point) { return ids.has(point.id); });
+            var txtex = "DY\n"+selectedPoints.length+"\n2\nx;y\n";
+            for (var point of selectedPoints) {
+                txtex += selfgff.getInstanceLabel(point.id)+";"+point.x+";"+point.y+";"+point.t+"\n";
             }
             var hiddenElement = document.createElement('a');
             hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);

@@ -9,11 +9,10 @@ normal Python module. Its facility-location selection idea is implemented in
 
 ## Use
 
-In the instance projection toolbar, enter a **Representative rows** limit and
-press Execute. Leave it blank to project all rows. Limits above the dataset
-size retain all rows. Selection excludes the target, respects the active
-feature subset and Euclidean/cosine choice, and preserves original instance
-IDs and labels. The sample limit is included in projection cache comparisons.
+Uploads now stream to disk and automatically build a representative working
+sample. No percentage is required. The **Further reduce rows** projection
+control is optional and reduces that working sample again; blank keeps the
+automatic sample. Original record IDs and labels remain attached to points.
 
 Standalone CSV selection:
 
@@ -44,12 +43,19 @@ Defaults approximate the full-data objective; they do not guarantee class
 balance, rare-group retention, or downstream prediction accuracy. Scale input
 features beforehand when their units should have equal influence.
 
-Distance working arrays are bounded by `batch_size * max_reference`, rather
-than dataset size squared. Input data is still loaded into memory, including
-a float64 conversion. Candidate scans also take O(n * budget) total work.
-This is not an out-of-core loader. A local synthetic check selected 100 unique
-rows from 20,000 x 32 Gaussian data in 0.24 seconds; this is not a real-data
-quality evaluation or a general performance guarantee.
+The in-memory selector still expects an array, but upload ingestion now feeds
+it a bounded candidate reservoir sampled across the entire CSV. The automatic
+budget is 128?3,000 rows, reduced for wide tables. The candidate pool is at most
+twice the budget; ingestion uses 128 coverage references. The full CSV stays
+in `original.csv`; `working.csv`, `transform.csv`, and `sample.csv` contain the
+retained records. `row_ids.json` maps them back to the source.
+
+Input is parsed in chunks. Memory depends on table width and field sizes,
+not just row count; exceptionally wide rows or huge text cells can still be
+expensive. This is an approximate reservoir-plus-submodular method, not exact
+facility location over every row. The last column is treated as a provisional
+target during upload. Up to 100 distinct values are protected with one row per
+value when the budget permits; other rare structure can still be missed.
 
 ## Findings fixed
 
@@ -67,11 +73,6 @@ quality evaluation or a general performance guarantee.
 
 ## Remaining limitations from inspection
 
-- Feature graph and XAI loaders use a first-row cap. Sorted datasets can bias
-  correlations, feature importance and class representation. The new projection
-  selector does not change those loaders.
-- XAI permutation importance is evaluated on training observations. Treat it
-  as descriptive training-model importance, not held-out predictive evidence.
 - MST still constructs a dense feature-distance matrix, NJ remains cubic below
   its cutoff, and exact KNN remains quadratic in distance computation despite
   its reduced working memory. Very wide feature graphs still need caution.
@@ -92,3 +93,37 @@ centroids, duplicate neighbours, large-offset distances, UMAP fallback, XAI
 infinity handling and projection ID/label alignment and object reuse.
 JavaScript syntax is checked with Node. Browser interaction has not been
 automated. Existing sklearn MDS deprecation warnings remain.
+
+## October 2026 audit fixes
+
+- Query requests require a valid account. Dataset writes require ownership or
+  admin access; shared datasets are read-only for other users (clone to edit).
+  Mutations use POST with Tornado XSRF protection. Admin checks use the database
+  account, not user-supplied identity. Private downloads are also authorized.
+- Dataset IDs and resolved paths are validated before filesystem access or
+  deletion. The local server binds explicitly to localhost. Session signing
+  uses a generated local secret instead of a secret committed in source.
+- Invalid JSON or an invalid database structure stops reads/writes with an
+  error; damaged metadata is never interpreted as an empty database. Preserve
+  the damaged file and restore `data/gff/localdb.json` from your own backup.
+- The server runs one process on every OS to keep JSON locking effective.
+  Do not run multiple app instances against the same data directory.
+- Raw CSV/ZIP uploads stream to disk, with a 10 GiB limit on uploaded and
+  uncompressed data. ZIPs must contain one CSV. Downloads build ZIPs on disk
+  and send them in chunks. Temporary uploads are cleaned up on failure.
+- Older datasets use deterministic whole-file reservoir sampling in bounded
+  loaders. New graphs, XAI, and previews no longer use only a file's first rows.
+  Existing cached graphs must be recomputed to reflect the corrected sampling.
+- XAI trains on one partition and measures permutation importance on a disjoint
+  held-out partition. Missing-value imputation uses training rows only. Tiny or
+  unstratifiable datasets report skipped permutation scores rather than training
+  performance. XAI runs outside the request loop with a bounded worker queue.
+- Projections retain continuous targets and use a continuous color range.
+  Categorical targets use explicit category codes. API callers may specify
+  `targettype=regression` for integer-valued regression targets. Old projection
+  caches without target-type metadata are recomputed when requested.
+
+Regression coverage in `tests/test_audit_fixes.py` includes access control,
+XSRF, path traversal, corrupted storage, streaming uploads larger than the
+server buffer, bounded representative samples, original-row alignment,
+held-out evaluation, private downloads and server responsiveness during XAI.

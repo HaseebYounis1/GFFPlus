@@ -14,6 +14,13 @@ import tornado.web
 import tornado.httpserver
 
 import threading
+import asyncio
+import tempfile
+from pathlib import Path
+from vx.gff.Security import dataset_path, current_account, authorize_dataset
+from vx.gff.Jobs import submit
+from vx.gff.Ingestion import source_ids
+from vx.com.py.sampling.CSVSample import sample_csv, read_rows
 
 
 import json as ujson
@@ -48,16 +55,70 @@ from vx.com.py.database.MongoDB import *
 class Query(BaseHandler):
     STALE_WORKING_TIMEOUT_SECONDS = 15 * 60
 
-    #Get RequestHandler
-    def get(self):
-        #MongoDB.dbaccess = Settings.DBACCESS
+    READ_TYPES = {2, 4, 5, 12, 17, 18, 22, 24}
+    _xai_running = set()
 
+    def _request(self):
+        user = current_account(self.current_user)
+        try:
+            app = DataTransfer(self.get_argument("data"))
+            kind = app.argms["type"]
+            if not isinstance(kind, int) or kind not in set(range(27)) - {3, 14, 15, 16}:
+                raise ValueError()
+        except (ValueError, TypeError, KeyError):
+            raise tornado.web.HTTPError(400, reason="Invalid query")
+        if self.request.method == "GET" and kind not in self.READ_TYPES:
+            raise tornado.web.HTTPError(405, reason="Use POST for changes")
+        if kind in {18, 19, 20} and user.get("adminid") != 1:
+            raise tornado.web.HTTPError(403, reason="Administrator access required")
+        if kind not in {2, 11, 18, 19, 20}:
+            write = kind not in self.READ_TYPES | {7, 25}
+            record = authorize_dataset(user, app.argms.get("file"), write=write)
+            if write and kind not in {0, 1} and (
+                app.argms["file"] in self._xai_running or record.get("statusopt") == 1
+            ):
+                raise tornado.web.HTTPError(409, reason="Wait for this dataset's current analysis to finish")
+            if write and app.argms["file"] in self._xai_running:
+                raise tornado.web.HTTPError(409, reason="Wait for this dataset's XAI analysis to finish")
+        if kind == 20:
+            app.argms["data"]["email0"] = user["email"]
+        return app
 
+    async def get(self):
+        app = self._request()
+        if app.argms["type"] == 12:
+            await self._download(app)
+        else:
+            self._dispatch(app)
+
+    async def post(self):
+        app = self._request()
+        kind = app.argms["type"]
+        if kind == 12:
+            await self._download(app)
+            return
+        workers = {7: Query.clonedataset, 13: Query.silhouette, 21: Query.makeInstancesLabels, 25: Query.ensureSampleCsv}
+        if kind in workers:
+            args = (app, self.current_user) if kind == 7 else (app,)
+            self.write(ujson.dumps(await asyncio.wrap_future(submit(workers[kind], *args))))
+            return
+        if kind != 26:
+            self._dispatch(app)
+            return
+        dataset = app.argms["file"]
+        if dataset in self._xai_running:
+            raise tornado.web.HTTPError(409, reason="XAI is already running for this dataset")
+        self._xai_running.add(dataset)
+        try:
+            self.write(await asyncio.wrap_future(submit(Query.runXAI, app)))
+        finally:
+            self._xai_running.discard(dataset)
+
+    def _dispatch(self, app):
         obj = ""
         
         #try:
         if True:    
-            app = DataTransfer(self.get_argument('data'))
 
             if app.argms["type"]==0:
                 #print("app.argms", app.argms)
@@ -67,8 +128,11 @@ class Query(BaseHandler):
                     status = Query.getStatus(app)
                     if status["statusopt"] in (0, 2):
                         Query.setStatus(app, 1);
-                        t = threading.Thread(target=Query.processFeatures, args=(app,))
-                        t.start()
+                        try:
+                            submit(Query.processFeatures, app)
+                        except Exception:
+                            Query.setStatus(app, 0)
+                            raise
                         status = Query.getStatus(app)
 
                     obj = ujson.dumps(status);
@@ -79,8 +143,11 @@ class Query(BaseHandler):
                 status = Query.getStatus(app)
                 if status["statusopt"] in (0, 2) and not Query.isprojectioncurrent(app):
                     Query.setStatus(app, 1);
-                    t = threading.Thread(target=Query.processInstances, args=(app,))
-                    t.start()
+                    try:
+                        submit(Query.processInstances, app)
+                    except Exception:
+                        Query.setStatus(app, 0)
+                        raise
                     status = Query.getStatus(app)
                 
                 obj = ujson.dumps(status);
@@ -113,8 +180,6 @@ class Query(BaseHandler):
             elif app.argms["type"]==11:
                 obj = ujson.dumps(User.changePassword(app, self.current_user));
 
-            elif app.argms["type"]==12:
-                obj = Query.downloaddataset(app, self.current_user, self);
 
             elif app.argms["type"]==13:
                 obj = ujson.dumps(Query.silhouette(app));
@@ -164,8 +229,6 @@ class Query(BaseHandler):
             elif app.argms["type"]==25:
                 obj = ujson.dumps(Query.ensureSampleCsv(app));
 
-            elif app.argms["type"]==26:
-                obj = ujson.dumps(Query.runXAI(app));
 
         #except Exception as e:
         #    print("Error: " + str(e))
@@ -175,21 +238,6 @@ class Query(BaseHandler):
         self.write(obj)
         self.finish()
         #self.write(obj)
-
-
-    #Post RequestHandler
-    def post(self):
-        rs = ""
-        if self.current_user:
-            app = DataTransfer(self.get_argument('data'))
-            
-            if app.argms["type"]==3:
-                app.argms["file"] = self.request.files['fileu'][0]
-    #            obj.file = filed['body'].decode('utf-8')
-
-            rs = Query.uploadfiledata(app.argms, self.current_user);
-
-        self.write(rs)
 
 
     @staticmethod
@@ -247,6 +295,8 @@ class Query(BaseHandler):
         filen = Settings.DATA_PATH+str(idin)+"/instance.obj"
         if not os.path.exists(filen):
             return False
+        if DBFile.openFile(filen).get("targettype") not in ("classification", "regression"):
+            return False
 
         keys = [
             "projection",
@@ -256,6 +306,7 @@ class Query(BaseHandler):
             "featureselected",
             "idinstanceslabels",
             "submodular_size",
+            "targettype",
         ]
         re = list(DBX.find(DBS.DBGFF, "data", {"_id":idin}))
         for row in re:
@@ -354,140 +405,6 @@ class Query(BaseHandler):
         return columns
 
     @staticmethod
-    def uploadfiledata(argms, iduser):
-        r = """<script>
-                parent.mwalert('','Error: upload file');
-                parent.opendatsetparser();
-                </script>"""
-
-        """
-        if Settings.MULIUSER == 1:
-            iduser = ObjectId(iduser.decode("utf-8")) """
-        iduser = ObjectId(iduser.decode("utf-8") if isinstance(iduser, bytes) else iduser)
-        #print("XXXXXXXXx1")
-        path = Settings.DATA_PATH
-        o_fname, ext = os.path.splitext(argms["file"]['filename'])        
-        ext = ext.lower()
-
-        dt_string = Query.now()
-        #print("XXXXXXXXx2")
-        if ext == ".csv" or ext == ".zip":
-            rowdata =   {
-                                "fenames": [],            
-                                "name": o_fname, 
-                                "type": ext,
-
-                                "configfeature": {},
-                                "typefeature": "",
-                                "layoutfeature": "",
-                                "versionfeature": Settings.VERSION,
-                                "featurecheck": [],
-
-                                "configinstance": {},
-                                "typeinstance": "",
-                                "layoutinstance": "",
-                                "versioninstance": Settings.VERSION,
-
-                                "datecreate": dt_string,
-                                "dateupdate": dt_string,
-                                "hasupdate": 0,
-                                "isshare": 0,
-                                
-                                "statusopt": 0,
-                                "statusval": "",
-                                
-                                "_id_user":iduser,
-                                
-                            };
-                
-            idin = None
-            try:
-            #if True:
-            
-                idin = DBX.insert(DBS.DBGFF, "data", rowdata)
-                idin = str(idin)
-
-                idin = Query.converid(idin)
-
-                da = list(DBX.find(DBS.DBGFF, "data", {"_id": idin}))
-                #print("XXXX",da)
-                for d in da:
-                    if ext == ".csv":
-                        # save file
-                        Query.savefile(path, str(idin), argms["file"]['body'])
-
-                    elif ext == ".zip":
-                        z = zipfile.ZipFile(io.BytesIO(argms["file"]['body']))
-                        data = z.read(z.infolist()[0])
-                        Query.savefile(path, str(idin), data)
-                    r = "<script>parent.opendatsetparser();</script>"
-            except Exception as e:
-                print("error upload file",e)
-            #    if idin!=None:
-                Query.dropdataset(str(idin))
-
-
-            """
-                elif ext == ".data":
-                # save file
-                n_fname = idin;
-                n_fname_dir = path+n_fname;
-
-                filename_o = n_fname_dir+"/original.data";
-                filename_t = n_fname_dir+"/transform.csv";
-
-                #create directory
-                if not os.path.exists(n_fname_dir):
-                    os.makedirs(n_fname_dir)
-                    
-                #create original csv file
-                output_file = open(filename_o, 'wb')
-                output_file.write(argms["file"]['body'])
-                output_file.close()
-                argms["file"] = "";
-                    
-                #read data original.csv and save
-                MData.converdata2csv(filename_o, filename_t)
-            """
-        #print("XXXXXXXXx3")
-        return r
-
-    @staticmethod
-    def savefile(path, n_fname, data):
-        #n_fname = idin;
-        n_fname_dir = path+n_fname;
-
-        filename_o = n_fname_dir+"/original.csv";
-        filename_t = n_fname_dir+"/transform.csv";
-
-        #create directory
-        Query.makedir(n_fname_dir)
-
-        #create original csv file
-
-        #'wb'
-        output_file = open(filename_o, mode="wb")
-        output_file.write(data)
-        output_file.close()
-        #argms["file"] = "";
-                    
-        #save transform csv file
-        df = pd.read_csv(filename_o, delimiter=",")
-        cat_columns = df.select_dtypes(["object"]).columns
-        if len(cat_columns):
-            df[cat_columns] = df[cat_columns].apply(
-                lambda col: col.astype("category").cat.codes
-            )
-        df.to_csv(filename_t, index=False)
-
-        # Pre-build a 5 000-row sample that the browser loads instead of the
-        # full file — eliminates multi-second d3.csv loads on large datasets.
-        sample_path = os.path.join(n_fname_dir, "sample.csv")
-        df.iloc[:5000].to_csv(sample_path, index=False)
-
-        del df
-        
-    @staticmethod
     def getdatasetname(app):
         idin = Query.converid(app.argms["file"])
 
@@ -547,16 +464,13 @@ class Query(BaseHandler):
 
     @staticmethod
     def ensureSampleCsv(app):
-        """Create sample.csv (5 000 rows) from transform.csv if it does not exist.
-        Called by the browser when sample.csv returns 404 (old datasets)."""
-        idin = Query.converid(app.argms["file"])
-        sample_path = os.path.join(Settings.DATA_PATH, str(idin), "sample.csv")
-        if not os.path.exists(sample_path):
-            transform_path = os.path.join(Settings.DATA_PATH, str(idin), "transform.csv")
-            if os.path.exists(transform_path):
-                df = pd.read_csv(transform_path, nrows=5000)
-                df.to_csv(sample_path, index=False)
-                del df
+        directory = dataset_path(app.argms["file"])
+        sample_path = directory / "sample.csv"
+        ids_path = directory / "sample_row_ids.json"
+        if not sample_path.exists() or not ids_path.exists():
+            frame, local_ids, _ = sample_csv(directory / "transform.csv", 5000)
+            frame.to_csv(sample_path, index=False)
+            ids_path.write_text(ujson.dumps(source_ids(directory, local_ids).tolist()), encoding="utf-8")
         return {"ok": 1}
 
     @staticmethod
@@ -659,39 +573,30 @@ class Query(BaseHandler):
         return {"response":1};
 
     @staticmethod
-    def downloaddataset(app, iduser, selft):
-        idin = Query.converid(app.argms["file"])
+    def _make_download(dataset_id):
+        directory = dataset_path(dataset_id)
+        output = tempfile.TemporaryFile()
+        try:
+            with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+                for path in directory.iterdir():
+                    if path.is_file() and not path.is_symlink() and not path.name.startswith("."):
+                        archive.write(path, path.name)
+            output.seek(0)
+            return output
+        except BaseException:
+            output.close()
+            raise
 
-        zipname="download.zip"
-
-        zipb = ""
-        dat = list(DBX.find( DBS.DBGFF,"data", {"_id": idin}))
-        for row in dat:
-            zipname=row["name"]+".zip";
-            f  = BytesIO();
-            
-            dirpath = Settings.DATA_PATH+str(idin)
-
-            fzip = zipfile.ZipFile(f, 'w', zipfile.ZIP_DEFLATED)
-            basedir = os.path.dirname(dirpath) + '/' 
-            for root, dirs, files in os.walk(dirpath):
-                if os.path.basename(root)[0] == '.':
-                    continue
-                # dirname = root.replace(basedir, '')
-                dirname = root.replace(basedir, '')
-                dirname = dirname.replace(str(idin), '')
-                # dirname = root
-                for fi in files:
-                    if fi[-1] == '~' or (fi[0] == '.' and fi != '.htaccess'):
-                        continue
-                    fzip.write(root + '/' + fi, dirname + '/' + fi)
-
-            selft.set_header('Content-Type', 'application/zip')
-            selft.set_header("Content-Disposition", "attachment; filename=%s" % zipname)
-            fzip.close()
-            zipb = f.getvalue()
-            f.close()
-        return zipb;
+    async def _download(self, app):
+        output = await asyncio.wrap_future(submit(Query._make_download, app.argms["file"]))
+        try:
+            self.set_header("Content-Type", "application/zip")
+            self.set_header("Content-Disposition", 'attachment; filename="dataset.zip"')
+            while block := output.read(1024 * 1024):
+                self.write(block)
+                await self.flush()
+        finally:
+            output.close()
 
     @staticmethod
     def setStatus(app, k):
@@ -769,8 +674,9 @@ class Query(BaseHandler):
 
     @staticmethod
     def dropdataset(idin):
-        filefe = os.path.join(Settings.DATA_PATH, str(idin))
-        shutil.rmtree(filefe, ignore_errors=True)
+        filefe = dataset_path(idin)
+        if filefe.exists():
+            shutil.rmtree(filefe)
         """ 
         if Settings.MULIUSER == 1:
             MongoDB.delete(DBS.DBGFF, "data", {"_id": ObjectId(idin)}) """
@@ -876,6 +782,10 @@ class Query(BaseHandler):
                             config =r["configinstance"]
 
                         pp = data["points"]
+                        if data.get("targettype") == "regression" or not 2 <= len({p["t"] for p in pp}) < len(pp):
+                            DBX.update(DBS.DBGFF, "data", {"_id": idin},
+                                       {"configinstance": dict(config, silhouette=None)})
+                            return None
                         X, y, z = [],[],{}
                         for p in pp:
                             X.append([p["x"], p["y"]])    
@@ -921,26 +831,22 @@ class Query(BaseHandler):
             DBX.update(DBS.DBGFF, "data", {'_id':idin}, dataup)
 
                     
-        #f = open(Settings.DATA_PATH+str(idin)+"/original.csv", mode="r",  encoding='utf-8-sig')
-        with open(Settings.DATA_PATH+str(idin)+"/original.csv", mode="r", encoding="utf-8-sig") as f:
-            _featuresnames_index = [x.strip() for x in f.readline().split(",")]
-        colname = _featuresnames_index[colid]
-        
+        directory = dataset_path(idin)
+        header = pd.read_csv(directory / "original.csv", nrows=0).columns
+        if not 0 <= colid < len(header):
+            raise ValueError("Invalid label column")
+        if (directory / "working.csv").exists():
+            frame = pd.read_csv(directory / "working.csv", usecols=[colid], dtype=str)
+            ids = source_ids(directory, np.arange(len(frame)))
+            return {str(int(i)): str(value) for i, value in zip(ids, frame.iloc[:, 0])}
+        Query.ensureSampleCsv(app)
+        ids = set(ujson.loads((directory / "sample_row_ids.json").read_text(encoding="utf-8")))
+        projection = DBFile.openFile(str(directory / "instance.obj"))
+        ids.update(int(point["id"]) for point in projection.get("points", []))
+        ordered = sorted(ids)[:10000]
+        labels = read_rows(directory / "original.csv", ordered, usecols=[colid])
+        return {str(i): str(label[0]) for i, label in zip(ordered, labels)}
 
-        read_kwargs = {
-            "delimiter": ",",
-            "usecols": [colname],
-        }
-        if maxlabels > 0:
-            read_kwargs["nrows"] = maxlabels
-        df = pd.read_csv(Settings.DATA_PATH+str(idin)+"/original.csv", **read_kwargs)
-        #rest = {}
-        #rest["instanceslabels"] = [ str(df[app.argms["colname"]][ind]) for ind in df.index]
-        #rest["idinstanceslabels"] = [ str(row[0]) for row in df.itertuples(index=False) ]
-        rest = [ str(row[0]) for row in df.itertuples(index=False) ]
-        del df
-        del re
-        return rest;
 
 
     """ 
@@ -1130,7 +1036,7 @@ class Query(BaseHandler):
             layoutfeature = DBFile.openFile(Settings.DATA_PATH+str(idin)+"/feature.obj")
             nodes = layoutfeature["graph"]["nodes"]
 
-            X = DataMatrix(filename)
+            X = DataMatrix(filename, max_rows=5000)
             columns = X.columns()
             colsindexes = X.columnsindexes()
             

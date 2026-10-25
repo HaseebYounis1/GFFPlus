@@ -48,16 +48,23 @@ function ServiceData(pname) {
     this.start = function () {
         var ps = MOPRO.pushprocess(pname);
         try {
-            var url = "./query?data=" + JSON.stringify(self.in);
-            d3.json(url, function (data) {
+            fetch("./query", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {"Content-Type": "application/x-www-form-urlencoded",
+                          "X-XSRFToken": document.querySelector('meta[name="xsrf-token"]').content},
+                body: new URLSearchParams({data: JSON.stringify(self.in)}).toString()
+            }).then(function (response) {
+                if (!response.ok) throw new Error("Request failed: " + response.status + " " + response.statusText);
+                return response.json();
+            }).then(function (data) {
                 self.ou = data;
-                try {
-                    self.event();
-                } catch (err) {
-                    console.log(pname + " event error:", err);
-                }
-                MOPRO.popprocess(ps);
-            });
+                self.event();
+            }).catch(function (err) {
+                self.ou = {status: "error", statusopt: 2, message: err.message};
+                console.error(pname, err);
+                try { self.event(); } catch (eventError) { console.error(eventError); }
+            }).finally(function () { MOPRO.popprocess(ps); });
         }
         catch (err) {
             MOPRO.popprocess(ps);
@@ -154,6 +161,7 @@ function GraphFromFeatures() {
                                                 ["dateupdate"],
                                                 ["hasupdate"],
                                                 ["isshare"],
+                                                ["sampling"],
                                                 
                                                 ["statusopt"],
                                                 ["statusval"],
@@ -358,7 +366,7 @@ function GraphFromFeatures() {
             ob.in.argms["maxlabels"] = 5000;
 
             ob.event = function () {
-                self.idinstancelabel = Array.isArray(this.ou) ? this.ou : [];
+                self.idinstancelabel = this.ou || {};
             };
             ob.start();
         }
@@ -1745,29 +1753,26 @@ function GraphFromFeatures() {
 
     this.uploadfiledata = function () {
         var fi = document.getElementById('fileu');
-        var file = fi.value;
-        var reg = /(.*?)\.(csv|zip)$/;
-        if (file.match(reg)) {
-            var fsize = fi.files.item(0).size;
-            var z = Math.round((fsize / 1024));
-            if (z <= 71680) {
-                var ob = new DataIO();
-                ob.argms.type = 3;
-                gelem('datafromupload').value = JSON.stringify(ob);
-
-                //showloading
-                MOPRO.show("uploading file");
-                gelem('formupload').submit();        
-                gelem('fileu').value = "";        
-            }
-            else{
-                self.mw.alert("","please use files up to 70MB");
-            }
+        var file = fi.files[0];
+        if (!file || !/\.(csv|zip)$/i.test(file.name)) {
+            self.mw.alert("", "Please use a CSV or ZIP containing one CSV");
+            return;
         }
-        else{
-            self.mw.alert("","Please use .csv and zip files");
-        }
-        fi.value = "";
+        MOPRO.show("Uploading and selecting representative rows");
+        fetch("./upload", {
+            method: "POST", credentials: "same-origin", body: file,
+            headers: {"Content-Type": "application/octet-stream",
+                      "X-Filename": encodeURIComponent(file.name),
+                      "X-XSRFToken": document.querySelector('meta[name="xsrf-token"]').content}
+        }).then(function (response) {
+            if (!response.ok) throw new Error("Upload failed: " + response.status + " " + response.statusText);
+            return response.json();
+        }).then(function (result) {
+            self.loaddatasets();
+            self.mw.alert("", "Loaded " + result.selected_rows + " representative rows from " +
+                          result.original_rows + " rows. The full CSV is retained on disk.");
+        }).catch(function (error) { self.mw.alert("", error.message); })
+          .finally(function () { MOPRO.hide(); fi.value = ""; });
     };
 
     this.loadfilecsv = function (callback) {
@@ -1797,26 +1802,22 @@ function GraphFromFeatures() {
             for (var i = 0; i < cbs.length; ++i) { cbs[i](self.dataload); }
         }
 
-        // Load the 5 000-row sample instead of the full file.
-        // On 404 (old dataset without sample.csv) ask the server to generate
-        // it (type=25), then retry once.
-        var sampleUrl = "./data/" + self.datafileselected + "/sample.csv";
-        d3.csv(sampleUrl, function (datai) {
-            if (datai) {
-                _commitLoad(datai);
-            } else {
-                // sample.csv missing — server generates it from transform.csv
-                var ob = new ServiceData("preparing data sample");
-                ob.in.argms["type"] = 25;
-                ob.in.argms["file"] = self.datafileselected;
-                ob.event = function () {
-                    d3.csv(sampleUrl, function (datai2) {
-                        _commitLoad(datai2);
-                    });
-                };
-                ob.start();
-            }
-        });
+        var datasetId = self.datafileselected;
+        var base = "./data/" + datasetId + "/";
+        var ob = new ServiceData("preparing representative preview");
+        ob.in.argms = {type: 25, file: datasetId};
+        ob.event = function () {
+            if (!this.ou || !this.ou.ok) { _commitLoad([]); return; }
+            fetch(base + "sample_row_ids.json", {credentials: "same-origin"})
+                .then(function (response) {
+                    if (!response.ok) throw new Error("Preview row IDs unavailable");
+                    return response.json();
+                }).then(function (ids) {
+                    self.dataloadids = ids;
+                    d3.csv(base + "sample.csv", function (rows) { _commitLoad(rows); });
+                }).catch(function (error) { console.error(error); _commitLoad([]); });
+        };
+        ob.start();
     };
 
     this.padmove = function (wwwd) {
@@ -2061,7 +2062,8 @@ function GraphFromFeatures() {
         ob.in.argms["statusval"] = status;
         ob.event = function () {
             response = this.ou;
-            gelem("topleft2").innerHTML = "SILHOUETTE: " + response;
+            gelem("topleft2").textContent = typeof response === "number"
+                ? "SILHOUETTE: " + response : "Silhouette needs at least two nontrivial target classes";
         };
         ob.start();
     };

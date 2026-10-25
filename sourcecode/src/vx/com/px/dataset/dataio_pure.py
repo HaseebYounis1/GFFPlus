@@ -5,6 +5,7 @@ import math
 
 import numpy as np
 import pandas as pd
+from vx.com.py.sampling.CSVSample import sample_csv
 
 
 EPS = 1e-7
@@ -15,6 +16,8 @@ class DataMatrix:
     def __init__(self, filecsv="None", unselectedfeids=None, max_rows=None,
                  selectedfeids=None, dtype=DEFAULT_DTYPE):
         self._dtype = np.dtype(dtype)
+        self._row_ids = np.empty(0, dtype=np.int64)
+        self._total_rows = 0
         self._trueids = []
         self._feids = []
         self._featuresnames = {}
@@ -50,8 +53,12 @@ class DataMatrix:
 
         read_kw = {"delimiter": ",", "encoding": "utf-8-sig", "usecols": self._feids}
         if max_rows is not None:
-            read_kw["nrows"] = max_rows
-        frame = pd.read_csv(filecsv, **read_kw)
+            frame, self._row_ids, self._total_rows = sample_csv(
+                filecsv, max_rows, usecols=self._feids)
+        else:
+            frame = pd.read_csv(filecsv, **read_kw)
+            self._row_ids = np.arange(len(frame))
+            self._total_rows = len(frame)
 
         # pandas reads integer usecols in file order; restore the caller's
         # requested order so original feature ids keep a stable local mapping.
