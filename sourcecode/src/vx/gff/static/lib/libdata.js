@@ -236,6 +236,9 @@ function GraphFromFeatures() {
     this.xaiColorMode = "graph";
     this.xaiSizeMode = "graph";
     this.xaiThreshold = 0.0;
+    this.contrastiveData = null;
+    this.perturbationPreview = null;
+    this.showFidelityHalo = false;
 
 /*     this.featuresChecks = [];
     this.featuresChecks_count = 0; */
@@ -466,6 +469,20 @@ function GraphFromFeatures() {
         return value.toExponential(2);
     };
 
+    this.formatPValue = function (value) {
+        if (value === undefined || value === null) {
+            return "n/a";
+        }
+        var p = parseFloat(value);
+        if (!isFinite(p)) {
+            return "n/a";
+        }
+        if (p < 0.0001) {
+            return p.toExponential(2);
+        }
+        return p.toFixed(4);
+    };
+
     this.renderXAISelectedSummary = function () {
         var panel = gelem("xaiselectedsummary");
         if (!panel) {
@@ -501,7 +518,11 @@ function GraphFromFeatures() {
             });
         }
 
-        if (rows.length == 0 && targetCount == 0) {
+        var quality = (self.datagff && self.datagff.layoutinstance && self.datagff.layoutinstance.quality)
+            ? self.datagff.layoutinstance.quality : null;
+        var hasContrastive = !!(self.contrastiveData && self.contrastiveData.status === "ok");
+
+        if (rows.length == 0 && targetCount == 0 && !hasContrastive && !quality) {
             panel.style.display = "none";
             panel.innerHTML = "";
             return;
@@ -514,7 +535,122 @@ function GraphFromFeatures() {
         var model = hasXai && self.datagff.layoutxai.model ? self.datagff.layoutxai.model : {};
         var targetName = xaiTarget.name || names[parseInt(self.target, 10)] || "";
         var selectedLabel = rows.length + (targetCount > 0 ? " + target" : "");
-        var html = "<div style='display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:3px;'>" +
+        var html = "";
+
+        if (quality) {
+            var haloActiveStyle = self.showFidelityHalo
+                ? "background:#d95f02; color:#fff; border:1px solid #b34800;"
+                : "background:#fff; color:#172033; border:1px solid #9fb3cd;";
+            html += "<div style='display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:4px; padding-bottom:3px; border-bottom:1px solid #cddbf0;'>" +
+                "<strong style='color:#0d3b66;'>Projection Fidelity</strong>" +
+                "<span title='Venna & Kaski k-NN Trustworthiness (false-neighbor resistance)'>T: <b>" + Number(quality.trustworthiness).toFixed(3) + "</b></span>" +
+                "<span title='Venna & Kaski k-NN Continuity (missing-neighbor resistance)'>C: <b>" + Number(quality.continuity).toFixed(3) + "</b></span>" +
+                "<span title='Shepard pairwise distance correlation'>R: <b>" + Number(quality.shepard_corr).toFixed(3) + "</b></span>" +
+                "<span title='Mean local k-NN neighborhood preservation'>Fidelity: <b>" + Math.round(Number(quality.mean_fidelity) * 100) + "%</b></span>";
+            if (quality.silhouette !== null && quality.silhouette !== undefined) {
+                html += "<span title='Class Silhouette coefficient in 2D'>Sil: <b>" + Number(quality.silhouette).toFixed(3) + "</b></span>";
+            }
+            html += "<span style='margin-left:auto; display:flex; gap:4px;'>" +
+                "<button type='button' onclick='GFFOBJ.toggleProjectionFidelityHalo();' style='padding:1px 5px; font-size:9px; border-radius:2px; cursor:pointer; " + haloActiveStyle + "' title='Highlight projected points with low k-NN neighborhood fidelity'>" +
+                    (self.showFidelityHalo ? "Hide Distortion Halos" : "Distortion Halos") +
+                "</button>" +
+                "<button type='button' onclick='GFFOBJ.clearInstanceBrush();' style='padding:1px 5px; font-size:9px; border-radius:2px; cursor:pointer; background:#fff; color:#172033; border:1px solid #9fb3cd;' title='Clear brushed instance groups and Ghost Trails'>Clear Brush</button>" +
+                "</span></div>";
+        }
+
+        if (hasContrastive) {
+            var cd = self.contrastiveData;
+            var modeBadge = cd.comparison_mode === "a_vs_b"
+                ? ("Group A (" + cd.group_a_count + ") vs. Group B (" + cd.group_b_count + ")")
+                : ("Group A (" + cd.group_a_count + ") vs. Rest (" + cd.group_b_count + ")");
+            html += "<div style='background:#f7faff; border:1px solid #b8cae6; padding:4px 6px; margin-bottom:4px; border-radius:2px;'>" +
+                "<div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:2px;'>" +
+                "<span><strong style='color:#006064;'>Contrastive &amp; Counterfactual Subspace Inspector</strong> &mdash; <b>" + self.escapeHTML(modeBadge) + "</b> (Purity: " + Math.round((cd.group_a_purity || 1) * 100) + "%)</span>" +
+                "<span style='font-size:9px; color:#4b5d73;'>Tip: Shift+Lasso in projection to brush Group B</span>" +
+                "</div>";
+
+            if (self.perturbationPreview && self.perturbationPreview.status === "ok") {
+                var pp = self.perturbationPreview;
+                var qd = pp.quality_delta || {};
+                var cNames = (pp.candidate_names || []).join(", ") || ("Feature #" + (pp.candidates || []).join(","));
+                var fmtDelta = function (v) {
+                    if (v === null || v === undefined) return "n/a";
+                    var num = Number(v);
+                    return (num >= 0 ? "+" : "") + num.toFixed(3);
+                };
+                html += "<div style='background:#ede7f6; border:1px solid #b39ddb; padding:2px 5px; margin-bottom:3px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;'>" +
+                    "<strong style='color:#4a148c;'>Ghost Trail Preview (" + self.escapeHTML(pp.action.toUpperCase() + " " + cNames) + "):</strong>" +
+                    "<span>&Delta;T: <b>" + fmtDelta(qd.trustworthiness) + "</b></span>" +
+                    "<span>&Delta;C: <b>" + fmtDelta(qd.continuity) + "</b></span>" +
+                    "<span>&Delta;Fidelity: <b>" + fmtDelta(qd.mean_fidelity) + "</b></span>" +
+                    (qd.silhouette !== null && qd.silhouette !== undefined ? ("<span>&Delta;Sil: <b>" + fmtDelta(qd.silhouette) + "</b></span>") : "") +
+                    "<button type='button' onclick='GFFOBJ.clearGhostTrailPreview();' style='margin-left:auto; padding:0 4px; font-size:9px; background:#fff; border:1px solid #9575cd; cursor:pointer;'>Clear Trails</button>" +
+                    "</div>";
+            }
+
+            html += "<div style='display:flex; gap:8px; flex-wrap:wrap;'>";
+            // Left column: Top Contrastive Drivers (Delta_f)
+            var topCon = Array.isArray(cd.top_contrastive) ? cd.top_contrastive.slice(0, 4) : [];
+            html += "<div style='flex:1; min-width:210px;'>" +
+                "<div style='font-weight:600; color:#1f2d3d; margin-bottom:2px;'>Local Contrastive Drivers (&Delta;<sub>f</sub> Cohen's d)</div>" +
+                "<table style='width:100%; border-collapse:collapse; font-size:9.5px;'>";
+            for (var ci = 0; ci < topCon.length; ci++) {
+                var cf = topCon[ci];
+                var dVal = Number(cf.effect_size || 0);
+                var cNorm = Math.min(1.0, Math.abs(Number(cf.contrast_norm || 0)));
+                var barColor = dVal >= 0 ? "#b2182b" : "#2166ac";
+                var dirSign = dVal >= 0 ? "+" : "";
+                var pFormatted = self.formatPValue(cf.p_value);
+                var qFormatted = self.formatPValue(cf.fdr_q_value);
+                var tVal = cf.t_statistic !== undefined ? Number(cf.t_statistic).toFixed(2) : "n/a";
+                var sigLabel = cf.is_significant ? " [FDR Significant]" : "";
+                var titleText = cf.name + " (Cohen's d: " + dirSign + dVal.toFixed(2) + ", Welch t: " + tVal + ", p: " + pFormatted + ", FDR q: " + qFormatted + sigLabel + ")";
+                html += "<tr>" +
+                    "<td title='" + self.escapeHTML(titleText) + "' style='max-width:95px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>" +
+                        self.escapeHTML(cf.name) + (cf.is_significant ? " <span style='color:#b2182b; font-weight:bold;' title='FDR significant (q &lt; 0.05)'>*</span>" : "") +
+                    "</td>" +
+                    "<td style='text-align:right; width:44px; font-weight:600; color:" + barColor + ";' title='Welch t=" + tVal + ", p=" + pFormatted + ", FDR q=" + qFormatted + "'>" + dirSign + dVal.toFixed(2) + "</td>" +
+                    "<td style='width:60px; padding-left:4px;' title='Welch p=" + pFormatted + ", FDR q=" + qFormatted + "'>" +
+                        "<div style='height:6px; width:100%; background:#dce4f0;'><div style='height:6px; width:" + Math.round(cNorm * 100) + "%; background:" + barColor + ";'></div></div>" +
+                        "<div style='font-size:7.5px; color:#556; line-height:9px; text-align:right;'>q=" + qFormatted + "</div>" +
+                    "</td>" +
+                    "<td style='width:38px; text-align:right; vertical-align:top;'>" +
+                        "<button type='button' onclick='GFFOBJ.previewCandidateFeature(" + cf.id + ", \"toggle\");' style='padding:0 3px; font-size:8.5px; cursor:pointer; background:#fff; border:1px solid #b0bec5;' title='Preview Ghost Trails when toggling this feature'>&Delta; Trail</button>" +
+                    "</td>" +
+                    "</tr>";
+            }
+            html += "</table></div>";
+
+            // Right column: Top Counterfactual Unselected Features (G_f)
+            var topCF = Array.isArray(cd.top_counterfactual) ? cd.top_counterfactual.slice(0, 4) : [];
+            html += "<div style='flex:1; min-width:220px;'>" +
+                "<div style='font-weight:600; color:#00695c; margin-bottom:2px;'>Counterfactual Subspace Additions (G<sub>f</sub> Gain)</div>" +
+                "<table style='width:100%; border-collapse:collapse; font-size:9.5px;'>";
+            for (var cfi = 0; cfi < topCF.length; cfi++) {
+                var rec = topCF[cfi];
+                var gainPct = Math.round(Math.min(1.0, Math.max(0.0, Number(rec.counterfactual_gain || 0))) * 100);
+                html += "<tr>" +
+                    "<td title='" + self.escapeHTML(rec.name) + " (Redundancy: " + Math.round(Number(rec.redundancy || 0) * 100) + "%)' style='max-width:105px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>" + self.escapeHTML(rec.name) + "</td>" +
+                    "<td style='text-align:right; width:36px; color:#00695c; font-weight:600;'>" + Number(rec.counterfactual_gain || 0).toFixed(2) + "</td>" +
+                    "<td style='width:50px; padding-left:4px;'>" +
+                        "<div style='height:6px; width:100%; background:#d0ece7;'><div style='height:6px; width:" + gainPct + "%; background:#00a676;'></div></div>" +
+                    "</td>" +
+                    "<td style='width:78px; text-align:right; white-space:nowrap;'>" +
+                        "<button type='button' onclick='GFFOBJ.previewCandidateFeature(" + rec.id + ", \"add\");' style='padding:0 3px; font-size:8.5px; cursor:pointer; background:#fff; border:1px solid #80cbc4; margin-right:2px;' title='Preview Ghost Trails if this feature is added'>&Delta; Trail</button>" +
+                        (!rec.is_selected ? ("<button type='button' onclick='GFFOBJ.addCounterfactualFeature(" + rec.id + ");' style='padding:0 4px; font-size:8.5px; cursor:pointer; background:#00a676; color:#fff; border:1px solid #00897b;' title='Add feature to active subspace and reproject'>+ Add</button>") : "<span style='color:#666; font-size:8px;'>Active</span>") +
+                    "</td>" +
+                    "</tr>";
+            }
+            html += "</table></div></div></div>";
+        }
+
+        if (rows.length == 0 && targetCount == 0) {
+            panel.innerHTML = html;
+            panel.style.display = html ? "block" : "none";
+            return;
+        }
+
+        html += "<div style='display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:3px;'>" +
             "<strong>XAI selected features</strong>" +
             "<span>Selected: " + self.escapeHTML(selectedLabel) + "</span>";
 
@@ -747,18 +883,136 @@ function GraphFromFeatures() {
         if (!node || node.category == 1) {
             return "extra";
         }
-        var name = self.datagff.fenames[node.label];
+        var name = (self.datagff && self.datagff.fenames && self.datagff.fenames[node.label])
+            ? self.datagff.fenames[node.label] : (node.name || "Feature #" + node.label);
+        var baseTip = "";
         if (self.xaiColorMode == "xai_importance" || self.xaiSizeMode == "xai_importance") {
             var xaiScore = parseFloat(node.xai_importance || 0.0).toFixed(6);
-            return name + ": XAI " + xaiScore;
+            baseTip = name + ": XAI " + xaiScore;
+        } else if (ranking && ranking[node.name] !== undefined) {
+            baseTip = name + ":" + ranking[node.name];
+        } else {
+            baseTip = name;
         }
-        return name + ":" + ranking[node.name];
+
+        if (self.contrastiveData && self.contrastiveData.by_feature_id) {
+            var cInfo = self.contrastiveData.by_feature_id[String(node.label)];
+            if (cInfo) {
+                var dVal = Number(cInfo.effect_size || 0);
+                var dirSign = dVal >= 0 ? "+" : "";
+                var pStr = self.formatPValue(cInfo.p_value);
+                var qStr = self.formatPValue(cInfo.fdr_q_value);
+                var tVal = cInfo.t_statistic !== undefined ? Number(cInfo.t_statistic).toFixed(2) : "n/a";
+                var sigStr = cInfo.is_significant ? " [FDR Significant]" : "";
+                baseTip += " | \u0394=" + dirSign + dVal.toFixed(2) + " (t=" + tVal + ", p=" + pStr + ", q=" + qStr + ")" + sigStr;
+                if (cInfo.is_top_counterfactual) {
+                    baseTip += " [Top Counterfactual: gain=" + Number(cInfo.counterfactual_gain || 0).toFixed(2) + "]";
+                }
+            }
+        }
+        return baseTip;
     };
 
     this.refreshFeatureNodeStyles = function () {
         if (self.layoutfeatures != null && self.layoutfeatures.applyNodeStyles) {
             self.layoutfeatures.applyNodeStyles();
         }
+    };
+
+    this.onInstanceSelectionChanged = function (groupA, groupB) {
+        groupA = Array.isArray(groupA) ? groupA : [];
+        groupB = Array.isArray(groupB) ? groupB : [];
+        if (self.datafileselected == "" || groupA.length === 0) {
+            self.contrastiveData = null;
+            self.refreshFeatureNodeStyles();
+            self.renderXAISelectedSummary();
+            return;
+        }
+        var ob = new ServiceData("computing contrastive subspace explanation");
+        ob.in.argms["type"] = 27;
+        ob.in.argms["file"] = self.datafileselected;
+        ob.in.argms["target"] = self.getTargetId();
+        ob.in.argms["featureselected"] = self.getfeatureselected();
+        ob.in.argms["group_a_ids"] = groupA;
+        ob.in.argms["group_b_ids"] = groupB;
+        ob.event = function () {
+            if (this.ou && this.ou.status === "ok") {
+                self.contrastiveData = this.ou;
+            } else {
+                self.contrastiveData = null;
+            }
+            self.refreshFeatureNodeStyles();
+            self.renderXAISelectedSummary();
+        };
+        ob.start();
+    };
+
+    this.previewCandidateFeature = function (featureOrigId, action) {
+        if (self.datafileselected == "") {
+            return;
+        }
+        var ob = new ServiceData("computing Ghost Trail subspace perturbation preview");
+        ob.in.argms["type"] = 28;
+        ob.in.argms["file"] = self.datafileselected;
+        ob.in.argms["target"] = self.getTargetId();
+        ob.in.argms["instanceproximity"] = gvalue("instanceproximity");
+        ob.in.argms["featureselected"] = self.getfeatureselected();
+        ob.in.argms["candidate_feature"] = parseInt(featureOrigId, 10);
+        ob.in.argms["action"] = action || "toggle";
+        ob.event = function () {
+            if (this.ou && this.ou.status === "ok") {
+                self.perturbationPreview = this.ou;
+                if (self.layoutinstance != null && self.layoutinstance.renderGhostTrails) {
+                    self.layoutinstance.renderGhostTrails(this.ou.trails || []);
+                }
+                self.renderXAISelectedSummary();
+            }
+        };
+        ob.start();
+    };
+
+    this.clearGhostTrailPreview = function () {
+        self.perturbationPreview = null;
+        if (self.layoutinstance != null && self.layoutinstance.clearGhostTrails) {
+            self.layoutinstance.clearGhostTrails();
+        }
+        self.renderXAISelectedSummary();
+    };
+
+    this.addCounterfactualFeature = function (featureOrigId) {
+        var nodeIndex = self.auxfeatureselectedf[parseInt(featureOrigId, 10)];
+        if (nodeIndex === undefined) {
+            return;
+        }
+        self.selectFeatureIds([nodeIndex], "add");
+        self.perturbationPreview = null;
+        if (self.layoutinstance != null && self.layoutinstance.clearGhostTrails) {
+            self.layoutinstance.clearGhostTrails();
+        }
+        self.onFeatureSelectionChanged();
+    };
+
+    this.toggleProjectionFidelityHalo = function () {
+        self.showFidelityHalo = !self.showFidelityHalo;
+        if (self.layoutinstance != null && self.layoutinstance.toggleFidelityHalo) {
+            self.layoutinstance.toggleFidelityHalo(self.showFidelityHalo);
+        }
+        self.renderXAISelectedSummary();
+    };
+
+    this.clearInstanceBrush = function () {
+        self.contrastiveData = null;
+        self.perturbationPreview = null;
+        if (self.layoutinstance != null) {
+            if (self.layoutinstance.clearSelection) {
+                self.layoutinstance.clearSelection();
+            }
+            if (self.layoutinstance.clearGhostTrails) {
+                self.layoutinstance.clearGhostTrails();
+            }
+        }
+        self.refreshFeatureNodeStyles();
+        self.renderXAISelectedSummary();
     };
 
     this.setFeatureLayoutMode = function (layout) {
@@ -1415,7 +1669,15 @@ function GraphFromFeatures() {
                         //var data = ds["layoutinstance"];
                         argms = {"infleft": 'infleft2',"infright": 'infright2'};
                         self.layoutinstance = new plotProjection(ProjectionColorF, "#visp", self, argms);
-                        self.updateProjectionFallbackStatus(ds);
+                        if (!self.updateProjectionFallbackStatus(ds)) {
+                            var q = ds.layoutinstance.quality;
+                            if (q) {
+                                var silStr = (q.silhouette !== null && q.silhouette !== undefined) ? (" | SIL: " + Number(q.silhouette).toFixed(3)) : "";
+                                gelem("topleft2").innerHTML = "T: " + Number(q.trustworthiness).toFixed(3) + " | C: " + Number(q.continuity).toFixed(3) + silStr;
+                                gelem("topright2").innerHTML = "FIDELITY: " + Math.round(Number(q.mean_fidelity) * 100) + "% (R=" + Number(q.shepard_corr).toFixed(2) + ")";
+                            }
+                        }
+                        self.renderXAISelectedSummary();
 
                         if (self.datagff.configinstance && self.datagff.configinstance.nodes) {
                             self.auxfeatureselectedi = self.makeFeatureAux(self.datagff.configinstance.nodes);

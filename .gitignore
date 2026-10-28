@@ -20,3 +20,7 @@ data/gff/*/
 
 data/gff/.session-secret
 data/gff/.upload-*
+
+# Paper and scratch workspaces
+paper_workspace/
+.agents/

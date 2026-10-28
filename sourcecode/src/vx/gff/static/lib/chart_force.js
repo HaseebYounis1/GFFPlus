@@ -55,9 +55,33 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             (self.sizecirclemax * self.sizecircleper);
     };
     self.nodeTooltip = function (d) {
-        return selft.getFeatureNodeTooltip ?
-            selft.getFeatureNodeTooltip(d, self.ranking) :
-            selft.datagff.fenames[d.label] + ":" + self.ranking[d.name];
+        if (selft && selft.getFeatureNodeTooltip) {
+            return selft.getFeatureNodeTooltip(d, self.ranking);
+        }
+        var name = (selft && selft.datagff && selft.datagff.fenames && selft.datagff.fenames[d.label])
+            ? selft.datagff.fenames[d.label] : (d.name || "Feature #" + d.label);
+        var tip = name + ":" + (self.ranking ? self.ranking[d.name] : "");
+        if (selft && selft.contrastiveData && selft.contrastiveData.by_feature_id) {
+            var info = selft.contrastiveData.by_feature_id[String(d.label)];
+            if (info) {
+                var formatP = function (val) {
+                    if (val === undefined || val === null) return "n/a";
+                    var p = Number(val);
+                    return p < 0.0001 ? p.toExponential(2) : p.toFixed(4);
+                };
+                var dVal = Number(info.effect_size || 0);
+                var dirSign = dVal >= 0 ? "+" : "";
+                var tVal = info.t_statistic !== undefined ? Number(info.t_statistic).toFixed(2) : "n/a";
+                var pStr = formatP(info.p_value);
+                var qStr = formatP(info.fdr_q_value);
+                var sigStr = info.is_significant ? " [FDR Significant]" : "";
+                tip += " | \u0394=" + dirSign + dVal.toFixed(2) + " (t=" + tVal + ", p=" + pStr + ", q=" + qStr + ")" + sigStr;
+                if (info.is_top_counterfactual) {
+                    tip += " [Top Counterfactual: gain=" + Number(info.counterfactual_gain || 0).toFixed(2) + "]";
+                }
+            }
+        }
+        return tip;
     };
 
     self.radiallayout = layout_radial(self.treehi, self.width);
@@ -210,6 +234,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     self.link = self.container.append("g").selectAll(".link");
     self.link2 = self.container.append("g").selectAll(".links");
     self.links = self.container.append("g").attr("class", "links");
+    self.contrastRing = self.container.append("g").attr("class", "contrast-rings").selectAll(".node-contrast-ring");
     self.node = self.container.append("g").selectAll(".node");
 
     self.d3line = d3.line()
@@ -228,6 +253,18 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
 
     //draw nodes
     this.drawnodes = function () {
+        self.contrastRing = self.contrastRing.data(self.graph.nodes);
+        self.contrastRing.exit().remove();
+        self.contrastRing = self.contrastRing.enter().append("circle")
+            .attr("class", "node-contrast-ring")
+            .attr("r", function (d) {
+                return (d.category == 1) ? 0 : (self.nodeRadius(d) + 3.2);
+            })
+            .style("fill", "none")
+            .style("stroke", "none")
+            .style("stroke-width", 0)
+            .style("pointer-events", "none");
+
         self.node = self.node.data(self.graph.nodes);
         self.node.exit().remove();
         self.node = self.node.enter().append("circle")
@@ -349,11 +386,76 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             .attr("r", function (d) {
                 return self.nodeRadius(d);
             });
+        if (self.contrastRing) {
+            self.contrastRing
+                .attr("r", function (d) {
+                    return (d.category == 1) ? 0 : (self.nodeRadius(d) + 3.2);
+                });
+        }
+    };
+
+    this.applyContrastiveStyles = function () {
+        if (!self.contrastRing) {
+            return;
+        }
+        var cData = (selft && selft.contrastiveData && selft.contrastiveData.by_feature_id)
+            ? selft.contrastiveData.by_feature_id : null;
+        if (!cData) {
+            self.contrastRing
+                .style("stroke", "none")
+                .style("stroke-width", 0)
+                .style("stroke-dasharray", null);
+            return;
+        }
+        self.contrastRing
+            .attr("r", function (d) {
+                if (d.category == 1) return 0;
+                var info = cData[String(d.label)];
+                if (info && info.is_top_counterfactual) {
+                    return self.nodeRadius(d) + 4.2;
+                }
+                return self.nodeRadius(d) + 2.8;
+            })
+            .style("stroke", function (d) {
+                if (d.category == 1) return "none";
+                var info = cData[String(d.label)];
+                if (!info) return "none";
+                if (info.is_top_counterfactual) {
+                    return "#00a676";
+                }
+                var cNorm = parseFloat(info.contrast_norm || 0.0);
+                if (Math.abs(cNorm) < 0.12) return "none";
+                return cNorm >= 0 ? "#b2182b" : "#2166ac";
+            })
+            .style("stroke-width", function (d) {
+                if (d.category == 1) return 0;
+                var info = cData[String(d.label)];
+                if (!info) return 0;
+                if (info.is_top_counterfactual) {
+                    return 2.4;
+                }
+                var absNorm = Math.abs(parseFloat(info.contrast_norm || 0.0));
+                var baseW = absNorm >= 0.12 ? (1.2 + 2.2 * absNorm) : 0;
+                return (info.is_significant && baseW > 0) ? (baseW + 0.8) : baseW;
+            })
+            .style("stroke-dasharray", function (d) {
+                if (d.category == 1) return null;
+                var info = cData[String(d.label)];
+                return (info && info.is_top_counterfactual) ? "3,2" : null;
+            })
+            .style("opacity", 0.92);
+
+        if (self.node) {
+            self.node.attr("title", function (d) {
+                return self.nodeTooltip(d);
+            });
+        }
     };
 
     this.applyNodeStyles = function () {
         self.updatecolors();
         self.updatesizecircle(self.sizecircleper);
+        self.applyContrastiveStyles();
     };
 
     this.drawedges = function () {
@@ -390,6 +492,10 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             .attr("cy", function (d, i) { return re[i].y })
             .attr("x", function (d, i) { return re[i].x })
             .attr("y", function (d, i) { return re[i].y });
+        if (self.contrastRing) {
+            self.contrastRing.attr("cx", function (d, i) { return re[i].x; })
+                .attr("cy", function (d, i) { return re[i].y; });
+        }
 
         self.link.attr("x1", function (d) { return re[d.source.index].x; })
             .attr("y1", function (d) { return re[d.source.index].y; })
@@ -594,6 +700,10 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         else {
             self.node.attr("cx", function (d) { return (self.width / 2) + d.x; })
                 .attr("cy", function (d) { return (self.height / 2) + d.y; });
+            if (self.contrastRing) {
+                self.contrastRing.attr("cx", function (d) { return (self.width / 2) + d.x; })
+                    .attr("cy", function (d) { return (self.height / 2) + d.y; });
+            }
 
             self.link.attr("x1", function (d) { return (self.width / 2) + d.source.x; })
                 .attr("y1", function (d) { return (self.height / 2) + d.source.y; })

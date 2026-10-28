@@ -4,6 +4,7 @@
 # Copyright (c) 2020
 # E-mail: lizhh@usp.br
 
+import warnings
 import numpy as np
 from sklearn.manifold import MDS
 
@@ -47,10 +48,12 @@ class MDSP(Projection):
             n_jobs=1,
         )
         # normalized_stress was added in sklearn 1.4; ignore on older installs
-        try:
-            mds = MDS(**mds_kw, normalized_stress="auto")
-        except TypeError:
-            mds = MDS(**mds_kw)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            try:
+                mds = MDS(**mds_kw, normalized_stress="auto")
+            except TypeError:
+                mds = MDS(**mds_kw)
 
-        Xt = mds.fit_transform(D)
+            Xt = mds.fit_transform(D)
         return Xt.tolist()

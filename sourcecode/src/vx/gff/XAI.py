@@ -548,3 +548,356 @@ def _is_int_like(value):
         return True
     except (TypeError, ValueError):
         return False
+
+
+class ContrastiveSubspaceExplainer:
+    """
+    Closed-Loop Contrastive & Counterfactual Subspace Explainer (CCSE) for GFF+.
+
+    Given a brushed subset of instances (Group A) and either a second brushed subset
+    (Group B) or the complement of the dataset (Rest), computes:
+      1. Local Contrastive Effect Sizes (Delta_f): Standardized mean difference
+         (signed Cohen's d) and Welch t-statistic across all features, normalized to [-1, 1].
+      2. Counterfactual Subspace Gain (G_f): Ranks unselected features by how strongly
+         adding f either (a) increases separation between Group A and Group B, or
+         (b) resolves target-class impurity within Group A while maintaining low
+         redundancy (orthogonality) against the currently selected feature subset.
+    """
+
+    @staticmethod
+    def benjamini_hochberg(p_values):
+        """
+        Benjamini-Hochberg (BH) step-up False Discovery Rate (FDR) adjustment.
+        Computes adjusted q-values in [0, 1] with monotonicity enforced.
+        """
+        p = np.asarray(p_values, dtype=np.float64)
+        m = len(p)
+        if m == 0:
+            return np.array([], dtype=np.float64)
+        if m == 1:
+            return np.clip(p, 0.0, 1.0)
+        sort_idx = np.argsort(p)
+        p_sorted = p[sort_idx]
+        ranks = np.arange(1, m + 1, dtype=np.float64)
+        q_sorted = p_sorted * (float(m) / ranks)
+        # Enforce backwards monotonicity: q_(i) <= q_(i+1)
+        q_sorted = np.minimum.accumulate(q_sorted[::-1])[::-1]
+        q_sorted = np.clip(q_sorted, 0.0, 1.0)
+        q_values = np.empty_like(q_sorted)
+        q_values[sort_idx] = q_sorted
+        return q_values
+
+    @staticmethod
+    def welch_t_test(X_a, X_b):
+        """
+        Welch's two-sample unequal variances t-test across all columns.
+        Returns:
+            t_stat: 1D array of Welch t-statistics
+            p_val: 1D array of two-tailed p-values
+            welch_df: 1D array of Welch-Satterthwaite degrees of freedom
+        Handles edge cases:
+            - n_a <= 1 or n_b <= 1 -> t=0.0, p=1.0, df=max(1.0, n_a + n_b - 2)
+            - zero variance (s_a^2 = 0 and s_b^2 = 0) -> t=0.0, p=1.0
+            - constant features -> t=0.0, p=1.0
+            - nu_f < 1.0 -> bounded to nu_f >= 1.0
+        """
+        from scipy import stats
+
+        X_a = np.asarray(X_a, dtype=np.float64)
+        X_b = np.asarray(X_b, dtype=np.float64)
+        if X_a.ndim == 1:
+            X_a = X_a[:, np.newaxis]
+        if X_b.ndim == 1:
+            X_b = X_b[:, np.newaxis]
+
+        n_a, m_features = X_a.shape
+        n_b = X_b.shape[0]
+
+        t_stat = np.zeros(m_features, dtype=np.float64)
+        p_val = np.ones(m_features, dtype=np.float64)
+        welch_df = np.full(m_features, max(1.0, float(n_a + n_b - 2)), dtype=np.float64)
+
+        if n_a <= 1 or n_b <= 1 or m_features == 0:
+            return t_stat, p_val, welch_df
+
+        mean_a = np.mean(X_a, axis=0)
+        mean_b = np.mean(X_b, axis=0)
+        var_a = np.var(X_a, axis=0, ddof=1)
+        var_b = np.var(X_b, axis=0, ddof=1)
+
+        s_a = var_a / float(n_a)
+        s_b = var_b / float(n_b)
+        denom_se = np.sqrt(s_a + s_b)
+
+        valid_mask = denom_se > 1e-12
+        if np.any(valid_mask):
+            t_stat[valid_mask] = (mean_a[valid_mask] - mean_b[valid_mask]) / denom_se[valid_mask]
+
+            num_df = (s_a[valid_mask] + s_b[valid_mask]) ** 2
+            denom_df = ((s_a[valid_mask] ** 2) / (n_a - 1)) + ((s_b[valid_mask] ** 2) / (n_b - 1))
+
+            safe_df_mask = denom_df > 1e-15
+            cur_dfs = np.full(int(np.sum(valid_mask)), max(1.0, float(n_a + n_b - 2)), dtype=np.float64)
+            cur_dfs[safe_df_mask] = np.maximum(1.0, num_df[safe_df_mask] / denom_df[safe_df_mask])
+            welch_df[valid_mask] = cur_dfs
+
+            raw_p = 2.0 * stats.t.sf(np.abs(t_stat[valid_mask]), df=welch_df[valid_mask])
+            raw_p = np.where(np.isfinite(raw_p), raw_p, 1.0)
+            p_val[valid_mask] = np.clip(raw_p, 0.0, 1.0)
+
+        return t_stat, p_val, welch_df
+
+    def execute(self, data_path, argms):
+        from time import perf_counter
+        started = perf_counter()
+        dataset_id = str(argms.get("file", "")).strip()
+        if not dataset_id:
+            raise ValueError("Dataset file id is required")
+
+        filefepath = os.path.join(str(data_path), dataset_id)
+        csv_path = os.path.join(filefepath, "transform.csv")
+        if not os.path.isfile(csv_path):
+            raise FileNotFoundError("Dataset file not found: {}".format(csv_path))
+
+        from vx.com.px.dataset.dataio_pure import DataMatrix
+        from vx.gff.Ingestion import source_ids
+
+        XDF = DataMatrix(csv_path, max_rows=5000, dtype=np.float64)
+        colsnames = XDF.columns_index()
+        trueids = XDF.trueids()
+        local_ids = XDF._row_ids
+        orig_row_ids = source_ids(filefepath, local_ids)
+
+        target_orig = _target_id_arg(argms.get("target"), len(trueids) - 1)
+        target_local = trueids[target_orig] if 0 <= target_orig < len(trueids) else -1
+
+        selected_set = set()
+        for idx in argms.get("featureselected", []):
+            try:
+                val = int(idx)
+            except (TypeError, ValueError):
+                continue
+            if val != target_orig:
+                selected_set.add(val)
+
+        group_a_raw = argms.get("group_a_ids", argms.get("selected_instances", []))
+        group_b_raw = argms.get("group_b_ids", [])
+        group_a_set = {int(x) for x in group_a_raw if _is_int_like(x)}
+        group_b_set = {int(x) for x in group_b_raw if _is_int_like(x)} - group_a_set
+
+        mask_a = np.isin(orig_row_ids, list(group_a_set)) if group_a_set else np.zeros(len(orig_row_ids), dtype=bool)
+        if group_b_set:
+            mask_b = np.isin(orig_row_ids, list(group_b_set))
+            comparison_mode = "a_vs_b"
+        else:
+            mask_b = ~mask_a
+            comparison_mode = "a_vs_rest"
+
+        n_a = int(mask_a.sum())
+        n_b = int(mask_b.sum())
+        if n_a == 0 or n_b == 0:
+            return {
+                "status": "empty",
+                "reason": "Select at least one instance in the projection to compute contrastive & counterfactual attributions.",
+                "comparison_mode": comparison_mode,
+                "group_a_count": n_a,
+                "group_b_count": n_b,
+                "features": [],
+                "contrastive_features": [],
+                "by_feature_id": {},
+                "top_contrastive": [],
+                "top_counterfactual": [],
+                "counterfactual_candidates": [],
+                "summary_text": "Lasso a cluster of instances in the 2D projection to inspect local feature drivers and counterfactual subspace recommendations.",
+            }
+
+        # Map original feature IDs to local columns
+        feature_entries = []
+        for orig_id, local_id in enumerate(trueids):
+            if local_id >= 0 and orig_id != target_orig:
+                feature_entries.append((orig_id, local_id, str(colsnames[local_id])))
+
+        if not feature_entries:
+            return {
+                "status": "empty",
+                "reason": "No non-target features available.",
+                "comparison_mode": comparison_mode,
+                "group_a_count": n_a,
+                "group_b_count": n_b,
+                "features": [],
+                "contrastive_features": [],
+                "by_feature_id": {},
+                "top_contrastive": [],
+                "top_counterfactual": [],
+                "counterfactual_candidates": [],
+                "summary_text": "",
+            }
+
+        orig_fids = [e[0] for e in feature_entries]
+        local_fids = [e[1] for e in feature_entries]
+        fnames = [e[2] for e in feature_entries]
+
+        # If no explicit subset was checked, consider all non-target features selected unless passed
+        has_explicit_selection = bool(selected_set) and len(selected_set) < len(orig_fids)
+
+        X_all = np.nan_to_num(XDF.selectcolumns_index(local_fids)._data, copy=True)
+        y_all = (
+            np.nan_to_num(XDF.getcolumn_array(target_local, copy=True).astype(np.float64), copy=False)
+            if target_local >= 0
+            else np.zeros(X_all.shape[0], dtype=np.float64)
+        )
+
+        X_a = X_all[mask_a]
+        X_b = X_all[mask_b]
+        y_a = y_all[mask_a]
+
+        mean_a = np.mean(X_a, axis=0)
+        mean_b = np.mean(X_b, axis=0)
+        var_a = np.var(X_a, axis=0, ddof=1) if n_a > 1 else np.zeros(X_all.shape[1])
+        var_b = np.var(X_b, axis=0, ddof=1) if n_b > 1 else np.zeros(X_all.shape[1])
+
+        denom_pool = np.sqrt(np.maximum(((max(1, n_a - 1) * var_a) + (max(1, n_b - 1) * var_b)) / max(1, n_a + n_b - 2), 1e-12))
+        global_std = np.maximum(np.std(X_all, axis=0), 1e-12)
+        scale = np.where(denom_pool > 1e-9, denom_pool, global_std)
+
+        # Signed Cohen's d effect size: positive => higher in Group A, negative => lower in Group A (higher in B/Rest)
+        cohens_d = (mean_a - mean_b) / scale
+        cohens_d = np.where(np.isfinite(cohens_d), cohens_d, 0.0)
+        abs_d = np.abs(cohens_d)
+        max_abs_d = float(np.max(abs_d)) if abs_d.size else 0.0
+        contrast_norm = (cohens_d / max_abs_d) if max_abs_d > 1e-12 else np.zeros_like(cohens_d)
+
+        # Welch's unequal variances t-test and Benjamini-Hochberg FDR correction
+        t_stat, p_val, welch_df = self.welch_t_test(X_a, X_b)
+        fdr_q_val = self.benjamini_hochberg(p_val)
+
+        # Target-class impurity within Group A (for classification targets)
+        inferred_task = type_of_target(y_all)
+        is_classification = inferred_task in ("binary", "multiclass")
+        group_a_purity = 1.0
+        within_a_sep = np.zeros(X_all.shape[1], dtype=np.float64)
+        if is_classification and n_a >= 2:
+            classes_a, counts_a = np.unique(y_a, return_counts=True)
+            group_a_purity = float(np.max(counts_a)) / float(n_a)
+            if len(classes_a) >= 2:
+                # Measure how strongly each feature separates the top two target classes mixed inside Group A
+                top_two = classes_a[np.argsort(-counts_a)[:2]]
+                c1_mask = y_a == top_two[0]
+                c2_mask = y_a == top_two[1]
+                if c1_mask.sum() >= 1 and c2_mask.sum() >= 1:
+                    m1 = np.mean(X_a[c1_mask], axis=0)
+                    m2 = np.mean(X_a[c2_mask], axis=0)
+                    within_a_sep = np.abs(m1 - m2) / global_std
+                    within_a_sep = np.where(np.isfinite(within_a_sep), within_a_sep, 0.0)
+
+        # Compute redundancy (maximum absolute correlation) of each feature against selected features
+        redundancy = np.zeros(X_all.shape[1], dtype=np.float64)
+        if has_explicit_selection:
+            sel_cols = [idx for idx, fid in enumerate(orig_fids) if fid in selected_set]
+            if sel_cols:
+                X_centered = X_all - np.mean(X_all, axis=0, keepdims=True)
+                norms = np.linalg.norm(X_centered, axis=0, keepdims=True)
+                X_unit = np.divide(X_centered, np.maximum(norms, 1e-12))
+                corr_mat = np.abs(X_unit.T @ X_unit[:, sel_cols])
+                redundancy = np.clip(np.max(corr_mat, axis=1), 0.0, 1.0)
+
+        # Counterfactual Gain (G_f):
+        # Combines between-group discriminative power (|d|) and within-group class-splitting power
+        # weighted by novelty (1 - 0.5 * redundancy) so recommended features add orthogonal signal.
+        raw_disc = 0.65 * _normalize_nonnegative(abs_d) + 0.35 * _normalize_nonnegative(within_a_sep)
+        novelty_factor = 1.0 - 0.5 * redundancy
+        cf_scores = raw_disc * novelty_factor
+        # For unselected features, normalize counterfactual gain to [0, 1]
+        if has_explicit_selection:
+            unsel_mask = np.array([fid not in selected_set for fid in orig_fids], dtype=bool)
+            unsel_max = float(np.max(cf_scores[unsel_mask])) if np.any(unsel_mask) else 0.0
+            cf_norm = np.where(unsel_mask, cf_scores / max(unsel_max, 1e-12), 0.0)
+        else:
+            cf_norm = _normalize_nonnegative(cf_scores)
+
+        features_out = []
+        by_feature_id = {}
+        for i, fid in enumerate(orig_fids):
+            is_sel = (fid in selected_set) if has_explicit_selection else True
+            q_val = float(fdr_q_val[i])
+            item = {
+                "id": int(fid),
+                "feid": int(fid),
+                "name": fnames[i],
+                "is_selected": bool(is_sel),
+                "mean_a": round(float(mean_a[i]), 4),
+                "mean_b": round(float(mean_b[i]), 4),
+                "mean_group_a": round(float(mean_a[i]), 4),
+                "mean_group_b": round(float(mean_b[i]), 4),
+                "std_group_a": round(float(np.sqrt(var_a[i])), 4),
+                "std_group_b": round(float(np.sqrt(var_b[i])), 4),
+                "effect_size": round(float(cohens_d[i]), 4),
+                "cohens_d": round(float(cohens_d[i]), 4),
+                "abs_effect": round(float(abs_d[i]), 4),
+                "contrast_norm": round(float(contrast_norm[i]), 4),
+                "delta_normalized": round(float(contrast_norm[i]), 4),
+                "t_statistic": round(float(t_stat[i]), 4),
+                "p_value": float(p_val[i]),
+                "welch_df": round(float(welch_df[i]), 2),
+                "fdr_q_value": q_val,
+                "is_significant": bool(q_val < 0.05),
+                "within_group_sep": round(float(within_a_sep[i]), 4),
+                "redundancy": round(float(redundancy[i]), 4),
+                "counterfactual_gain": round(float(cf_norm[i]), 4),
+            }
+            features_out.append(item)
+            by_feature_id[str(fid)] = item
+
+        # Rank top contrastive drivers (preferring currently active features when a subset is selected)
+        active_Pool = [f for f in features_out if f["is_selected"]] if has_explicit_selection else list(features_out)
+        top_contrastive = sorted(active_Pool, key=lambda x: x["abs_effect"], reverse=True)[:8]
+
+        # Rank top counterfactual unselected features (or top under-utilized features if all are selected)
+        unsel_Pool = [f for f in features_out if not f["is_selected"]]
+        if unsel_Pool:
+            top_counterfactual = sorted(unsel_Pool, key=lambda x: x["counterfactual_gain"], reverse=True)[:6]
+        else:
+            top_counterfactual = sorted(features_out, key=lambda x: x["counterfactual_gain"], reverse=True)[:5]
+
+        # Mark top 3 counterfactual candidates on by_feature_id for the force-graph dashed halo
+        top_cf_ids = {f["id"] for f in top_counterfactual[:3] if not f["is_selected"] or not has_explicit_selection}
+        for f in features_out:
+            f["is_top_counterfactual"] = f["id"] in top_cf_ids
+
+        comp_label = "Group B ({} pts)".format(n_b) if comparison_mode == "a_vs_b" else "Rest ({} pts)".format(n_b)
+        summary_parts = [
+            "Comparing Group A ({} pts, purity {:.0%}) vs. {}.".format(n_a, group_a_purity, comp_label)
+        ]
+        if top_contrastive:
+            lead = top_contrastive[0]
+            direction = "higher" if lead["effect_size"] >= 0 else "lower"
+            sig_label = " (significant, FDR q={:.2e})".format(lead["fdr_q_value"]) if lead["is_significant"] else ""
+            summary_parts.append(
+                "Primary driver: {} ({} in Group A, d={:+.2f}{}).".format(
+                    lead["name"], direction, lead["effect_size"], sig_label
+                )
+            )
+        if top_counterfactual and has_explicit_selection:
+            best_cf = top_counterfactual[0]
+            summary_parts.append(
+                "Top counterfactual addition: {} (gain {:.2f}, redundancy {:.0%}).".format(
+                    best_cf["name"], best_cf["counterfactual_gain"], best_cf["redundancy"]
+                )
+            )
+
+        return {
+            "status": "ok",
+            "comparison_mode": comparison_mode,
+            "has_explicit_selection": has_explicit_selection,
+            "group_a_count": n_a,
+            "group_b_count": n_b,
+            "group_a_purity": round(group_a_purity, 4),
+            "elapsed_ms": round((perf_counter() - started) * 1000.0, 2),
+            "features": features_out,
+            "contrastive_features": features_out,
+            "by_feature_id": by_feature_id,
+            "top_contrastive": top_contrastive,
+            "top_counterfactual": top_counterfactual,
+            "counterfactual_candidates": top_counterfactual,
+            "summary_text": " ".join(summary_parts),
+        }

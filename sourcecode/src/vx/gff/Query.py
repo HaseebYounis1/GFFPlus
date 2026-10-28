@@ -43,7 +43,7 @@ from datetime import datetime, timedelta
 from vx.gff.Settings import *
 from vx.gff.BaseHandler import *
 from vx.gff.MakeProjection import *
-from vx.gff.XAI import XAIPipeline
+from vx.gff.XAI import XAIPipeline, ContrastiveSubspaceExplainer
 from vx.gff.graphtree.graphtree_pure import *
 from vx.gff.User import *
 
@@ -63,7 +63,7 @@ class Query(BaseHandler):
         try:
             app = DataTransfer(self.get_argument("data"))
             kind = app.argms["type"]
-            if not isinstance(kind, int) or kind not in set(range(27)) - {3, 14, 15, 16}:
+            if not isinstance(kind, int) or kind not in set(range(29)) - {3, 14, 15, 16}:
                 raise ValueError()
         except (ValueError, TypeError, KeyError):
             raise tornado.web.HTTPError(400, reason="Invalid query")
@@ -72,7 +72,7 @@ class Query(BaseHandler):
         if kind in {18, 19, 20} and user.get("adminid") != 1:
             raise tornado.web.HTTPError(403, reason="Administrator access required")
         if kind not in {2, 11, 18, 19, 20}:
-            write = kind not in self.READ_TYPES | {7, 25}
+            write = kind not in self.READ_TYPES | {7, 25, 27, 28}
             record = authorize_dataset(user, app.argms.get("file"), write=write)
             if write and kind not in {0, 1} and (
                 app.argms["file"] in self._xai_running or record.get("statusopt") == 1
@@ -97,7 +97,14 @@ class Query(BaseHandler):
         if kind == 12:
             await self._download(app)
             return
-        workers = {7: Query.clonedataset, 13: Query.silhouette, 21: Query.makeInstancesLabels, 25: Query.ensureSampleCsv}
+        workers = {
+            7: Query.clonedataset,
+            13: Query.silhouette,
+            21: Query.makeInstancesLabels,
+            25: Query.ensureSampleCsv,
+            27: Query.contrastiveExplanation,
+            28: Query.subspacePerturbationPreview,
+        }
         if kind in workers:
             args = (app, self.current_user) if kind == 7 else (app,)
             self.write(ujson.dumps(await asyncio.wrap_future(submit(workers[kind], *args))))
@@ -228,6 +235,12 @@ class Query(BaseHandler):
 
             elif app.argms["type"]==25:
                 obj = ujson.dumps(Query.ensureSampleCsv(app));
+
+            elif app.argms["type"]==27:
+                obj = ujson.dumps(Query.contrastiveExplanation(app));
+
+            elif app.argms["type"]==28:
+                obj = ujson.dumps(Query.subspacePerturbationPreview(app));
 
 
         #except Exception as e:
@@ -802,6 +815,15 @@ class Query(BaseHandler):
                         DBX.update(DBS.DBGFF, "data", {'_id':idin}, {'configinstance':config})
 
         return si;
+
+    @staticmethod
+    def contrastiveExplanation(app):
+        explainer = ContrastiveSubspaceExplainer()
+        return explainer.execute(Settings.DATA_PATH, app.argms)
+
+    @staticmethod
+    def subspacePerturbationPreview(app):
+        return MakeProjection.preview_perturbation(app.argms)
 
     @staticmethod
     def makeInstancesLabels(app):

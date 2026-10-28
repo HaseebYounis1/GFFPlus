@@ -1,4 +1,4 @@
-﻿# distutils: language = c
+# distutils: language = c
 # Author: Ivar Vargas Belizario and Liz M. Huancapaza Hilasaca
 # Copyright (c) 2020
 # All Rights Reserved
@@ -573,150 +573,227 @@ class GraphMST:
 ## NeighborJoining
 ###############################    
 class NeighborJoining:
-    def __init__(self):
-        pass
+    def __init__(self, dm=None):
+        self._init_dm = dm
 
-    def execute(self, dm, N, root, graph):
-#        nodetmp ={  "label":"", "category":"",
-#                    "color":"#00ffff", "weight": 1.0,
-#                    "ratio": 1.0, "xpos":-1.0, "ypos":-1.0}
-#
-#        linktmp ={"source":-1,"target":-1,"weight":0}
-        vs = N+(N-2)
-#        self.graph = { k:{"node":[], "link":[] } for k in range(vs) }
-        clusters = { k:k for k in range(N)}
-        ud = [0.0 for k in range(vs)]
+    def execute(self, dm=None, N=None, root=None, graph=None):
+        if dm is None and self._init_dm is not None:
+            dm = self._init_dm
+            N = dm.rows() if hasattr(dm, "rows") else len(dm._mat)
+            vs = N + max(0, N - 2)
+            root = [{} for _ in range(vs)]
+            graph = {"nodes": [{"name": i, "category": 0 if i < N else 1} for i in range(vs)], "links": []}
+            self.execute(dm, N, root, graph)
+            return {"nodes": graph["nodes"], "edges": graph["links"], "root": root}
+        if N <= 0:
+            return -1
+        if N == 1:
+            return 0
+        vs = N + (N - 2)
+        clusters = {k: k for k in range(N)}
+        ud = [0.0 for _ in range(vs)]
+
+        # Pre-populate a contiguous float64 distance matrix for vectorized NJ steps
+        D = np.zeros((vs, vs), dtype=np.float64)
+        if hasattr(dm, "_mat") and isinstance(dm._mat, np.ndarray) and dm._mat.shape[0] >= N:
+            D[:N, :N] = dm._mat[:N, :N]
+        else:
+            for i in range(N):
+                for j in range(i + 1, N):
+                    val = float(dm.getValue(i, j))
+                    D[i, j] = val
+                    D[j, i] = val
+        np.fill_diagonal(D, 0.0)
+        self._D = D
+
         u = N
         repetir = True
         while repetir:
-#            idmx = u
-            self.nj(dm, clusters, graph, root, u, ud);
-            u+=1
-            repetir = (len(clusters)>2);
+            self.nj(dm, clusters, graph, root, u, ud)
+            u += 1
+            repetir = (len(clusters) > 2)
 
-#        ab = clusters.items();
-#        a = ab[0][0]
-#        b = ab[1][0]
-#        self.addEdge(graph, root, a, b, u, awu, bwu)        
-#        idmx = vs-1
-#        print("idmx", idmx)
-        return vs-1
+        self._D = None
+        return vs - 1
 
     def nj(self, dm, clusters, graph, root, u, ud):
-        n = len(clusters)
-        for a,va in clusters.items():
-            ud[a] = 0.0
-            for b,va2 in clusters.items():
-#                if a!=b:
-                ud[a] += dm.getValue(a, b)
+        active = np.fromiter(clusters.keys(), dtype=np.intp, count=len(clusters))
+        n = len(active)
 
-        ai, bi, minp = -1, -1, float("inf")
+        if hasattr(self, "_D") and self._D is not None and active.max(initial=0) < self._D.shape[0]:
+            D = self._D
+            D_sub = D[np.ix_(active, active)]
+        else:
+            D = None
+            D_sub = np.zeros((n, n), dtype=np.float64)
+            for idx_a, a in enumerate(active):
+                for idx_b in range(idx_a + 1, n):
+                    b = int(active[idx_b])
+                    val = float(dm.getValue(int(a), b))
+                    D_sub[idx_a, idx_b] = val
+                    D_sub[idx_b, idx_a] = val
 
-        # Q matrix
-        for a,va in clusters.items():
-            for b,va2 in clusters.items():
-                if a!=b:
-                    v = (n-2.0)*dm.getValue(a, b)-ud[a]-ud[b];
-                    if v<minp:
-                        minp = v
-                        ai = a
-                        bi = b
+        ud_sub = D_sub.sum(axis=1)
+        for idx_a, a in enumerate(active):
+            ud[int(a)] = float(ud_sub[idx_a])
+
+        Q = (n - 2.0) * D_sub - ud_sub[:, None] - ud_sub[None, :]
+        np.fill_diagonal(Q, np.inf)
+        flat_min = int(np.argmin(Q))
+        idx_ai, idx_bi = divmod(flat_min, n)
+        ai = int(active[idx_ai])
+        bi = int(active[idx_bi])
+        d_ab = float(D_sub[idx_ai, idx_bi])
 
         # ai u, bi u, edges values
-        aiu = ((0.5)*dm.getValue(ai, bi))+((1.0/(2.0*(n-2.0)))*(ud[ai]-ud[bi]));
-        biu = dm.getValue(ai, bi)-aiu;
-        
-#        print(ai, bi, u, aiu, biu)
-
-        # insert 2 edges in the graph
-#        print("WW",clusters[ai], clusters[bi], u, awu, bwu)
-#        print("len(clusters)",len(clusters), clusters[ai], clusters[bi], u)
-#        self.addEdge(graph, root, clusters[ai], clusters[bi], u, aiu, ubi)
+        aiu = (0.5 * d_ab) + ((1.0 / (2.0 * (n - 2.0))) * (ud[ai] - ud[bi]))
+        biu = d_ab - aiu
 
         # add two edges from ai and bi vertex to new u vertex
         self.addEdge(graph, root, clusters[ai], u, aiu)
         self.addEdge(graph, root, clusters[bi], u, biu)
-        # delete one cluster
-        
-        # to comple the last edge
-        if len(clusters)==3:
-            ci = -1
-            for k, v in clusters.items():
-                if k!= ai and k!= bi:
-                    ci = k
-            uci = dm.getValue(ai, ci)-aiu;
-            self.addEdge(graph, root, clusters[ci], u, uci) 
-            
+
+        # to complete the last edge
+        if n == 3:
+            for idx_c, k in enumerate(active):
+                k_int = int(k)
+                if k_int != ai and k_int != bi:
+                    uci = float(D_sub[idx_ai, idx_c]) - aiu
+                    self.addEdge(graph, root, clusters[k_int], u, uci)
+                    break
+
         del clusters[bi]
-#        print(clusters)
 
-
-        # update distance matrix
-        for i,v2 in clusters.items():
-            v = (0.5)*(dm.getValue(ai,i)+dm.getValue(bi,i)-dm.getValue(ai,bi))
-            dm.setValue(ai, i, v)
+        # update distance matrix vectorized
+        rem_mask = active != bi
+        rem_active = active[rem_mask]
+        new_dists = 0.5 * (D_sub[idx_ai, rem_mask] + D_sub[idx_bi, rem_mask] - d_ab)
+        if D is not None:
+            D[ai, rem_active] = new_dists
+            D[rem_active, ai] = new_dists
+            D[ai, ai] = 0.0
+        for idx_rem, k_int in enumerate(rem_active.tolist()):
+            dm.setValue(ai, k_int, float(new_dists[idx_rem]))
 
         clusters[ai] = u
-        # update index matrix with new vertex
-
 
     def addEdge(self, graph, root, a, b, w):
-        graph["links"].append({"source":a,"target":b,"weight":w})
+        graph["links"].append({"source": a, "target": b, "weight": w})
 
         root[a][str(b)] = w
         root[b][str(a)] = w
 
 
-
-
-
 class DistanceMatrix:
     def __init__(self, X):
-        n = len(X)
-        self.dist = [ [] for i in range(n)]
-        for i in range(n):
-            self.dist[i] = [ 0.0 for j in range(n)];
-            for j in range(i,n):
-                if i!=j:
-                    d = DistanceMatrix.proximity(X[i], X[j], 1);
-                    self.dist[i][j] = d
-                    
-    def get(self, i, j):
-        mi = i
-        mj = j
-        if j<i:
-            mi = j
-            mj = i
+        if isinstance(X, (int, np.integer)):
+            n = int(X)
+            self._mat = np.zeros((n, n), dtype=np.float64)
+            self.dist = self._mat.tolist()
+            self.N = n
+            return
+        arr = np.asarray(X, dtype=np.float64)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        n = arr.shape[0]
+        self.N = n
+        if n == 0:
+            self._mat = np.zeros((0, 0), dtype=np.float64)
+            self.dist = []
+            return
+        from scipy.spatial.distance import cdist
+        self._mat = cdist(arr, arr, metric="euclidean")
+        np.fill_diagonal(self._mat, 0.0)
+        self.dist = self._mat.tolist()
 
-        return self.dist[mi][mj]
+    def get(self, i, j):
+        return float(self._mat[i, j])
+
+    def getValue(self, i, j):
+        return float(self._mat[i, j])
+
+    def setValue(self, i, j, v):
+        val = float(v)
+        self._mat[i, j] = val
+        self._mat[j, i] = val
+
+    def rows(self):
+        return self.N
+
+    def cols(self):
+        return self.N
 
     @staticmethod
-    def proximity(a,b,t):
-        p = 0.0;
-        if t==1:
-            for i in range(len(a)):
-                c = a[i]-b[i]
-                c = c**2
-                p+=c
-            p = math.sqrt(p)
-        return p
-
-
-
-
+    def proximity(a, b, t):
+        if t == 1:
+            diff = np.asarray(a, dtype=np.float64) - np.asarray(b, dtype=np.float64)
+            return float(np.sqrt(np.dot(diff, diff)))
+        return 0.0
 
 
 class Metrics:
     @staticmethod
     def average_silhouette(dm, clus, i):
-        d = 0.0;
-        n = 0.0;
+        d = 0.0
+        n = 0.0
         for j in clus:
             if i != j:
                 d += dm.get(i, j)
                 n += 1.0
-        d/=n;
-        return d;
+        return d / n if n > 0 else 0.0
+
+    @staticmethod
+    def compute_pointwise_silhouette(X, y, z=None):
+        """Return per-point silhouette array S of length len(X) using vectorized BLAS distances."""
+        arr = np.asarray(X, dtype=np.float64)
+        n = arr.shape[0]
+        if n <= 1:
+            return np.zeros(n, dtype=np.float64)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+
+        if z is None:
+            _, labels = np.unique(np.asarray(y), return_inverse=True)
+            nz = int(labels.max()) + 1 if labels.size else 0
+        else:
+            labels = np.array([z[yi] for yi in y], dtype=np.intp)
+            nz = len(z)
+
+        if nz < 2:
+            return np.zeros(n, dtype=np.float64)
+
+        from scipy.spatial.distance import cdist
+        D = cdist(arr, arr, metric="euclidean")
+        np.fill_diagonal(D, 0.0)
+
+        counts = np.bincount(labels, minlength=nz)
+        non_empty = np.where(counts > 0)[0]
+        if len(non_empty) < 2:
+            return np.zeros(n, dtype=np.float64)
+
+        # Sum of distances from every point i to each cluster k
+        cluster_sums = np.zeros((n, nz), dtype=np.float64)
+        for k in non_empty:
+            cluster_sums[:, k] = D[:, labels == k].sum(axis=1)
+
+        S = np.zeros(n, dtype=np.float64)
+        for i in range(n):
+            c = labels[i]
+            c_count = counts[c]
+            if c_count <= 1:
+                S[i] = 0.0
+                continue
+            a_i = cluster_sums[i, c] / float(c_count - 1)
+            b_i = float("inf")
+            for k in non_empty:
+                if k == c:
+                    continue
+                mean_k = cluster_sums[i, k] / float(counts[k])
+                if mean_k < b_i:
+                    b_i = mean_k
+            denom = max(a_i, b_i)
+            S[i] = 0.0 if (b_i == a_i or denom <= 0.0 or not np.isfinite(b_i)) else (b_i - a_i) / denom
+        return S
 
     """
     * @silhoute function
@@ -726,55 +803,11 @@ class Metrics:
     """
     @staticmethod
     def compute_silhoute(X, y, z):
-        nz = len(z)
-        print("Compute silhoute...")
-        s = 0.0        
         n = len(X)
-        S = [0.0 for i in range(n)]
-        clusters = [ [] for i in range(nz)]
-       
-        #lesval = 1
-        #havzero = False
-        #for i in y:
-        #    if i==0:
-        #        havzero = True
-        #        lesval = 0
-        #        break
-        #if havzero==False:
-        #    for i in range(len(y)):
-        #        y[i] = y[i]-lesval
-
-        for i in range(n):
-            clusters[z[y[i]]].append(i);
-
-        d2 = DistanceMatrix(X)
-        #pm_t = X.proximitymatrix_cols(pmetric)
-
-
-        for i in range(n):
-            if len(clusters[z[y[i]]])>1:#is not singleton
-                a = Metrics.average_silhouette(d2, clusters[z[y[i]]], i);
-                b = float("inf");
-                for j in range(nz):
-                    if len(clusters[j]) > 0:
-                        if j == z[y[i]]:
-                            continue
-                        b = min(b, Metrics.average_silhouette(d2, clusters[j], i))
-
-                S[i] = (b - a)/max(a, b)
-                if b==a:
-                    S[i] = 0.0;
-
-            else:
-                S[i] = 0.0;
-        del d2
-        for i in range(n):
-            s += S[i]
-
-        s = s/n;
-        print("silhoute complete")
-
-        return s;
+        if n == 0:
+            return 0.0
+        S = Metrics.compute_pointwise_silhouette(X, y, z)
+        return float(S.sum() / n)
         
 
 
