@@ -360,7 +360,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     };
     
     this.updatecolors = function () {
-        var selectionBArray = self.svgw.selectAll("circle").nodes();
+        var selectionBArray = self.svgw.selectAll(".node").nodes();
         self.node
         .style("fill", function (d) {
             return (d.category == 1) ? '#ccc' : self.vertexcolorf(self.nodeColorMetric(d));
@@ -374,7 +374,8 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             if (!cir) {
                 continue;
             }
-            cir.style.stroke = d3.color(cir.style.fill).darker();
+            var fillCol = d3.color(cir.style.fill);
+            cir.style.stroke = fillCol ? fillCol.darker() : "#333";
             cir.style.strokeWidth = 2.25;
             cir.style.opacity = "1.0";
         }
@@ -530,8 +531,8 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     this.highlightforce = function (ids, options) {
         ids = ids || [];
         options = options || {};
-        var selectionBArray = self.svgw.selectAll("circle").nodes();
-        self.svgw.selectAll("circle")
+        var selectionBArray = self.svgw.selectAll(".node").nodes();
+        self.svgw.selectAll(".node")
             .style("stroke", "white")
             .style("stroke-width", function (d) {
                 return (d.category == 1) ? 0.0 : 0.75;
@@ -547,7 +548,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
                 self.viewlayoutgraphtree();
             }
 
-            self.svgw.selectAll("circle")
+            self.svgw.selectAll(".node")
                 .style("opacity", function (d) {
                     return (d.category == 1) ? 1.0 : 0.5;
                 })
@@ -568,7 +569,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             
             self.viewlayoutgraphtree();
 
-            self.svgw.selectAll("circle")
+            self.svgw.selectAll(".node")
                 .style("opacity", 1.0);
 
 
@@ -578,11 +579,13 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         for (var i in ids) {
             cir = selectionBArray[ids[i]];
             if (cir) {
-                cir.style.stroke = d3.color(cir.style.fill).darker();
+                var fillCol = d3.color(cir.style.fill);
+                cir.style.stroke = fillCol ? fillCol.darker() : "#333";
                 cir.style.strokeWidth = 2.25;
                 cir.style.opacity = "1.0";
             }
         }
+        self.applyContrastiveStyles();
         if (!options.silent) {
             selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
         }
