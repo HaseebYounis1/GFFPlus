@@ -181,21 +181,22 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
             }
         });
 
-    var zoom = d3.zoom()
-        .scaleExtent([0.5, 50])
-        .on("zoom", function () {
-            self.transform = d3.event.transform;
-            self.container.attr("transform", self.transform);
-        });
-
-    this.svg = d3.select(idview)
+    d3.select(idview).selectAll("svg").remove();
+    this.svgRoot = d3.select(idview)
         .append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
-        .call(drag)
-        .call(zoom)
-        .append("g");
-    //.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+        .call(drag);
+    this.svg = this.svgRoot.append("g");
+
+    this.zoomController = createConstantZoom(this.svgRoot, function (t) {
+        self.transform = t;
+        self.container.attr("transform", self.transform);
+    }, { minScale: 0.25, maxScale: 30, hasLassoDrag: true });
+    var zoom = this.zoomController.behavior;
+    this.zoomIn = this.zoomController.zoomIn;
+    this.zoomOut = this.zoomController.zoomOut;
+    this.resetZoom = this.zoomController.resetZoom;
 
     // Define arrowhead marker for Ghost Trail displacement vectors
     var defs = this.svg.append("defs");
@@ -270,15 +271,28 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         .on("mouseover", function (d) {
             var fidText = d.fidelity !== undefined ? (" | Fidelity: " + Math.round(parseFloat(d.fidelity) * 100) + "%") : "";
             var tLabel = targetNames[d.t] !== undefined ? (" | Class: " + targetNames[d.t]) : "";
+            var fileEntry = selfgff.getPointFile ? selfgff.getPointFile(d.id) : null;
+            var labelText = fileEntry
+                ? ("File: " + selfgff.escapeHTML(fileEntry.name) + " (ID: " + d.id + ")")
+                : ("ID: " + selfgff.escapeHTML(selfgff.getInstanceLabel(d.id)));
+            var tipHtml = "<div>" + labelText + selfgff.escapeHTML(tLabel + fidText) + "</div>";
+            if (fileEntry && fileEntry.isImage && fileEntry.url) {
+                tipHtml += "<img src='" + fileEntry.url + "' style='max-width:120px; max-height:90px; margin-top:4px; display:block; border:1px solid #fff;'>";
+            }
             selfgff.setToolpiltex(
                 d3.event.pageX,
                 d3.event.pageY,
-                "ID: " + selfgff.getInstanceLabel(d.id) + tLabel + fidText
-                );
-
+                tipHtml
+            );
         })
         .on("mouseout", function (d) {
             selfgff.hideToolpiltex();
+        })
+        .on("click", function (d) {
+            if (selfgff.showPointFileDetails) {
+                selfgff.showPointFileDetails(d.id);
+            }
+            d3.event.stopPropagation();
         })
         .merge(self.nodesc);
 
@@ -401,57 +415,62 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         self.highlight(idview, self.selected, self.selectedB);
     };
 
-    this.exwholeinstancesprj = function() {
-        var txtex = "DY\n"+data.length+"\n2\nx;y\n";
-        for (var i in data){
-            txtex += selfgff.getInstanceLabel(data[i].id)+";"+data[i].x+";"+data[i].y+";"+data[i].t+"\n";
+    function formatVisPipelinePrj(pointsList) {
+        var lines = [
+            "DY",
+            String(pointsList.length),
+            "2",
+            "x;y"
+        ];
+        for (var idx = 0; idx < pointsList.length; ++idx) {
+            var pt = pointsList[idx];
+            var name = selfgff.getExportInstanceName
+                ? selfgff.getExportInstanceName(pt.id)
+                : String(selfgff.getInstanceLabel(pt.id));
+            name = String(name).replace(/[;\r\n]+/g, "_").trim() || ("point_" + pt.id);
+            var px = Number.isFinite(Number(pt.x)) ? Number(pt.x).toFixed(6) : "0.000000";
+            var py = Number.isFinite(Number(pt.y)) ? Number(pt.y).toFixed(6) : "0.000000";
+            var ptClass = Number.isFinite(Number(pt.t)) ? Number(pt.t).toFixed(1) : "0.0";
+            lines.push(name + ";" + px + ";" + py + ";" + ptClass);
         }
-        var hiddenElement = document.createElement('a');
-        hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);
-        hiddenElement.target = '_blank';
-        hiddenElement.download = selfgff.datafileselectedname+'_selected.prj';
-        hiddenElement.click();
+        return lines.join("\n") + "\n";
+    }
 
-/*         gelem("idaddhide").appendChild(hiddenElement);
-        var olddata=gelem("idaddhide").lastChild;
-        gelem("idaddhide").removeChild(olddata); */
+    this.exwholeinstancesprj = function() {
+        if (!data || data.length === 0) {
+            selfgff.mw.alert("Export", "No projection points available to export.");
+            return;
+        }
+        var txtex = formatVisPipelinePrj(data);
+        var fname = sanitizeExportFilename(selfgff.datafileselectedname, "projection") + "_whole.prj";
+        downloadBlobFile(txtex, fname, "text/plain;charset=utf-8");
     };
 
     this.exselectedinstancesprj = function() {
-        if (self.selected.length>0){        
+        if (self.selected.length > 0) {
             var ids = new Set(self.selected);
             var selectedPoints = data.filter(function (point) { return ids.has(point.id); });
-            var txtex = "DY\n"+selectedPoints.length+"\n2\nx;y\n";
-            for (var point of selectedPoints) {
-                txtex += selfgff.getInstanceLabel(point.id)+";"+point.x+";"+point.y+";"+point.t+"\n";
-            }
-            var hiddenElement = document.createElement('a');
-            hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);
-            hiddenElement.target = '_blank';
-            hiddenElement.download = selfgff.datafileselectedname+'_selected.prj';
-            hiddenElement.click();
-
-    /*         gelem("idaddhide").appendChild(hiddenElement);
-            var olddata=gelem("idaddhide").lastChild;
-            gelem("idaddhide").removeChild(olddata); */
+            var txtex = formatVisPipelinePrj(selectedPoints);
+            var fname = sanitizeExportFilename(selfgff.datafileselectedname, "projection") + "_selected.prj";
+            downloadBlobFile(txtex, fname, "text/plain;charset=utf-8");
+        } else {
+            selfgff.mw.alert("Export", "Select points in the projection (lasso) before exporting selected .prj.");
         }
     };
 
     this.exidsinstancesprj = function() {
-        if (self.selected.length>0){
-            var txtex = "";
-            for (var i of self.selected){
-                txtex += selfgff.getInstanceLabel(i)+"\n";
+        if (self.selected.length > 0) {
+            var lines = [];
+            for (var i of self.selected) {
+                var label = selfgff.getExportInstanceName
+                    ? selfgff.getExportInstanceName(i)
+                    : String(selfgff.getInstanceLabel(i));
+                lines.push(label);
             }
-            var hiddenElement = document.createElement('a');
-            hiddenElement.href = 'data:text/txt;charset=utf-8,' + encodeURI(txtex);
-            hiddenElement.target = '_blank';
-            hiddenElement.download = selfgff.datafileselectedname+'_ids.txt';
-            hiddenElement.click();
-
-    /*         gelem("idaddhide").appendChild(hiddenElement);
-            var olddata=gelem("idaddhide").lastChild;
-            gelem("idaddhide").removeChild(olddata); */
+            var fname = sanitizeExportFilename(selfgff.datafileselectedname, "projection") + "_ids.txt";
+            downloadBlobFile(lines.join("\n") + "\n", fname, "text/plain;charset=utf-8");
+        } else {
+            selfgff.mw.alert("Export", "Select points in the projection (lasso) before exporting IDs.");
         }
     };
 

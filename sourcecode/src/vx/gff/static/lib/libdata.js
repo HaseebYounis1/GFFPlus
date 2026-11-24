@@ -199,7 +199,15 @@ function GraphFromFeatures() {
     //this.ranking = [];
     this.datafileselected = "";
     this.datafileselectedname = "";
-    this.lwidth = ((window.screen.availWidth) / 2) - 100;
+    this.computeStablePanelSize = function () {
+        var vw = window.innerWidth || window.screen.availWidth || 1280;
+        var vh = window.innerHeight || window.screen.availHeight || 800;
+        // Account for left nav (~56px), outer padding (20px), gap (8px), and 2x 58px panel chrome
+        var byWidth = Math.floor((vw - 208) / 2);
+        var byHeight = Math.floor(vh - 205);
+        return Math.max(480, Math.min(720, Math.min(byWidth, byHeight)));
+    };
+    this.lwidth = this.computeStablePanelSize();
 
     this.isnamedbedited = false;
     this.intarget = false;
@@ -224,7 +232,10 @@ function GraphFromFeatures() {
     
     // new attributes
     this.unselectedfeids = [];
-    this.idinstancelabel = [];
+    this.idinstancelabel = {};
+    this.pointFiles = {};
+    this.pointFileList = [];
+    this.activePointId = null;
     
     this.auxfeatureselectedf = {};
     this.auxfeatureselectedi = {};
@@ -246,6 +257,9 @@ function GraphFromFeatures() {
     this.makeFeatureAux = function(nodes){
         var rest = {};
         for(var e of nodes){
+            if (e.category == 1 || e.label === undefined || e.label === null || e.label < 0) {
+                continue;
+            }
             rest[e.label] = e.name;
         }
         return rest;
@@ -361,22 +375,330 @@ function GraphFromFeatures() {
     };
 
     this.makeInstancesLabels = function(colname){
-        if (self.datafileselected != "" && colname!=""){
+        if (colname === "" || colname === null || colname === undefined) {
+            self.idinstancelabel = {};
+            if (self.pointFileList.length > 0) {
+                self.rebindPointFilesToCurrentPoints();
+            }
+            return;
+        }
+        if (self.datafileselected != ""){
             var ob = new ServiceData("compute instances labels");
             ob.in.argms["type"] = 21;
             ob.in.argms["file"] = self.datafileselected;
-            ob.in.argms["idinstanceslabels"] = parseInt(colname);
+            ob.in.argms["idinstanceslabels"] = parseInt(colname, 10);
             ob.in.argms["maxlabels"] = 5000;
 
             ob.event = function () {
                 self.idinstancelabel = this.ou || {};
+                if (self.pointFileList.length > 0) {
+                    self.rebindPointFilesToCurrentPoints();
+                }
             };
             ob.start();
         }
     };
 
+    this.getPointFile = function(id){
+        if (self.pointFiles && Object.prototype.hasOwnProperty.call(self.pointFiles, String(id))) {
+            return self.pointFiles[String(id)];
+        }
+        return null;
+    };
+
     this.getInstanceLabel = function(id){
-        return self.idinstancelabel[id] !== undefined ? self.idinstancelabel[id] : id;
+        var pf = self.getPointFile(id);
+        if (pf && pf.name) {
+            return pf.name;
+        }
+        if (self.idinstancelabel && self.idinstancelabel[String(id)] !== undefined && self.idinstancelabel[String(id)] !== "") {
+            return self.idinstancelabel[String(id)];
+        }
+        return id;
+    };
+
+    this.getExportInstanceName = function(id){
+        var pf = self.getPointFile(id);
+        if (pf && pf.name) {
+            return String(pf.name).replace(/[;\r\n]+/g, "_").trim();
+        }
+        if (self.idinstancelabel && self.idinstancelabel[String(id)] !== undefined && String(self.idinstancelabel[String(id)]).trim() !== "") {
+            return String(self.idinstancelabel[String(id)]).replace(/[;\r\n]+/g, "_").trim();
+        }
+        var prefix = sanitizeExportFilename(self.datafileselectedname, "instance");
+        return prefix + "_" + id;
+    };
+
+    this.zoomFeatures = function (direction) {
+        if (!self.layoutfeatures) return;
+        if (direction === "in" && self.layoutfeatures.zoomIn) {
+            self.layoutfeatures.zoomIn();
+        } else if (direction === "out" && self.layoutfeatures.zoomOut) {
+            self.layoutfeatures.zoomOut();
+        } else if (direction === "reset" && self.layoutfeatures.resetZoom) {
+            self.layoutfeatures.resetZoom();
+        }
+    };
+
+    this.zoomInstances = function (direction) {
+        if (!self.layoutinstance) return;
+        if (direction === "in" && self.layoutinstance.zoomIn) {
+            self.layoutinstance.zoomIn();
+        } else if (direction === "out" && self.layoutinstance.zoomOut) {
+            self.layoutinstance.zoomOut();
+        } else if (direction === "reset" && self.layoutinstance.resetZoom) {
+            self.layoutinstance.resetZoom();
+        }
+    };
+
+    this.clearPointFiles = function () {
+        for (var i = 0; i < self.pointFileList.length; ++i) {
+            if (self.pointFileList[i] && self.pointFileList[i].url) {
+                try { URL.revokeObjectURL(self.pointFileList[i].url); } catch (e) {}
+            }
+        }
+        self.pointFiles = {};
+        self.pointFileList = [];
+        self.activePointId = null;
+        var st = gelem("pointfilesstatus");
+        if (st) st.textContent = "";
+        var clr = gelem("pointfilesclearbtn");
+        if (clr) clr.style.display = "none";
+        var panel = gelem("pointfilespanel");
+        if (panel) {
+            panel.style.display = "none";
+            panel.innerHTML = "";
+        }
+    };
+
+    this.loadPointFiles = function (fileList) {
+        if (!fileList || fileList.length === 0) {
+            return;
+        }
+        self.clearPointFiles();
+        var entries = [];
+        for (var i = 0; i < fileList.length; ++i) {
+            var f = fileList[i];
+            if (!f || !f.name) continue;
+            var mime = String(f.type || "").toLowerCase();
+            var lower = f.name.toLowerCase();
+            var isImage = mime.indexOf("image/") === 0 || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower);
+            var isAudio = mime.indexOf("audio/") === 0 || /\.(wav|mp3|ogg|flac|m4a)$/i.test(lower);
+            var isVideo = mime.indexOf("video/") === 0 || /\.(mp4|webm|ogv)$/i.test(lower);
+            var isText = mime.indexOf("text/") === 0 || /\.(txt|csv|json|md|xml|log|yaml|yml)$/i.test(lower);
+            var stem = f.name.replace(/\.[^/.]+$/, "");
+            entries.push({
+                file: f,
+                name: f.name,
+                stem: stem,
+                lowerName: lower,
+                lowerStem: stem.toLowerCase(),
+                url: URL.createObjectURL(f),
+                type: mime,
+                size: f.size || 0,
+                isImage: isImage,
+                isAudio: isAudio,
+                isVideo: isVideo,
+                isText: isText,
+                textPreview: null
+            });
+        }
+        entries.sort(function (a, b) {
+            return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+        });
+        self.pointFileList = entries;
+        self.rebindPointFilesToCurrentPoints();
+    };
+
+    this.rebindPointFilesToCurrentPoints = function () {
+        self.pointFiles = {};
+        var points = (self.datagff && self.datagff.layoutinstance && Array.isArray(self.datagff.layoutinstance.points))
+            ? self.datagff.layoutinstance.points : [];
+        var entries = self.pointFileList || [];
+        if (entries.length === 0) {
+            return;
+        }
+
+        var byLowerName = {};
+        var byLowerStem = {};
+        var byNumericId = {};
+        for (var i = 0; i < entries.length; ++i) {
+            var e = entries[i];
+            byLowerName[e.lowerName] = e;
+            if (!byLowerStem[e.lowerStem]) {
+                byLowerStem[e.lowerStem] = e;
+            }
+            var m = e.stem.match(/(\d+)/);
+            if (m && byNumericId[String(parseInt(m[1], 10))] === undefined) {
+                byNumericId[String(parseInt(m[1], 10))] = e;
+            }
+        }
+
+        var matched = 0;
+        var unmatchedPoints = [];
+        var usedEntries = new Set();
+        for (var p = 0; p < points.length; ++p) {
+            var pt = points[p];
+            var rawLabel = (self.idinstancelabel && self.idinstancelabel[String(pt.id)] !== undefined)
+                ? String(self.idinstancelabel[String(pt.id)]).trim() : "";
+            var lowerLabel = rawLabel.toLowerCase();
+            var lowerLabelStem = lowerLabel.replace(/\.[^/.]+$/, "");
+            var found = null;
+            if (lowerLabel && byLowerName[lowerLabel]) {
+                found = byLowerName[lowerLabel];
+            } else if (lowerLabelStem && byLowerStem[lowerLabelStem]) {
+                found = byLowerStem[lowerLabelStem];
+            } else if (byNumericId[String(pt.id)]) {
+                found = byNumericId[String(pt.id)];
+            }
+            if (found) {
+                self.pointFiles[String(pt.id)] = found;
+                usedEntries.add(found);
+                matched++;
+            } else {
+                unmatchedPoints.push(pt);
+            }
+        }
+
+        // Fallback: map remaining unmatched points to remaining files in natural sorted order
+        if (unmatchedPoints.length > 0) {
+            var remainingFiles = entries.filter(function (e) { return !usedEntries.has(e); });
+            var count = Math.min(unmatchedPoints.length, remainingFiles.length);
+            for (var k = 0; k < count; ++k) {
+                self.pointFiles[String(unmatchedPoints[k].id)] = remainingFiles[k];
+                matched++;
+            }
+        }
+
+        var st = gelem("pointfilesstatus");
+        if (st) {
+            st.textContent = points.length > 0
+                ? (matched + "/" + points.length)
+                : (entries.length + " files");
+        }
+        var clr = gelem("pointfilesclearbtn");
+        if (clr) clr.style.display = "inline-block";
+
+        var activeIds = (self.layoutinstance && Array.isArray(self.layoutinstance.selected) && self.layoutinstance.selected.length > 0)
+            ? self.layoutinstance.selected
+            : points.slice(0, 36).map(function (pt) { return pt.id; });
+        self.renderPointFilesPanel(activeIds);
+    };
+
+    this.showPointFileDetails = function (pointId) {
+        self.activePointId = pointId;
+        var ids = (self.layoutinstance && Array.isArray(self.layoutinstance.selected) && self.layoutinstance.selected.length > 0)
+            ? self.layoutinstance.selected.slice()
+            : [pointId];
+        if (ids.indexOf(pointId) === -1) {
+            ids.unshift(pointId);
+        }
+        self.renderPointFilesPanel(ids);
+    };
+
+    this.renderPointFilesPanel = function (pointIds) {
+        var panel = gelem("pointfilespanel");
+        if (!panel) return;
+        var hasLoadedFiles = self.pointFileList && self.pointFileList.length > 0;
+        var points = (self.datagff && self.datagff.layoutinstance && Array.isArray(self.datagff.layoutinstance.points))
+            ? self.datagff.layoutinstance.points : [];
+        var targetNames = (self.datagff && self.datagff.layoutinstance && self.datagff.layoutinstance.tartegsnames)
+            ? self.datagff.layoutinstance.tartegsnames : {};
+
+        if (!hasLoadedFiles && self.activePointId === null) {
+            panel.style.display = "none";
+            panel.innerHTML = "";
+            return;
+        }
+
+        var pointById = {};
+        for (var i = 0; i < points.length; ++i) {
+            pointById[String(points[i].id)] = points[i];
+        }
+
+        var ids = Array.isArray(pointIds) && pointIds.length > 0
+            ? pointIds
+            : points.slice(0, 36).map(function (pt) { return pt.id; });
+
+        var headerCount = hasLoadedFiles
+            ? (Object.keys(self.pointFiles).length + " / " + points.length + " points matched")
+            : ("Point inspector");
+
+        var html = "<div style='display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:1px solid #cbd5e1; padding-bottom:4px;'>" +
+            "<div><strong>Associated Point Files</strong> <span style='color:#475569;'>(" + self.escapeHTML(headerCount) + " &mdash; showing " + Math.min(ids.length, 48) + " of " + ids.length + ")</span></div>" +
+            "<div style='display:flex; gap:4px;'>" +
+                "<button type='button' class='btn btn-outline-secondary btn-sm' style='padding:0 6px; font-size:10px;' onclick='gelem(\"pointfilesinput\").click();'>Load Files</button>" +
+                "<button type='button' class='btn btn-outline-secondary btn-sm' style='padding:0 6px; font-size:10px;' onclick='gelem(\"pointfolderinput\").click();'>Load Folder</button>" +
+                (hasLoadedFiles ? "<button type='button' class='btn btn-outline-danger btn-sm' style='padding:0 6px; font-size:10px;' onclick='GFFOBJ.clearPointFiles();'>Clear</button>" : "") +
+            "</div></div>";
+
+        // Active clicked point detailed preview
+        if (self.activePointId !== null && pointById[String(self.activePointId)]) {
+            var activePt = pointById[String(self.activePointId)];
+            var activeFile = self.getPointFile(self.activePointId);
+            var clsName = targetNames[activePt.t] !== undefined ? targetNames[activePt.t] : activePt.t;
+            html += "<div style='display:flex; gap:10px; align-items:flex-start; background:#ffffff; border:1px solid #bfdbfe; padding:6px; margin-top:6px; border-radius:3px;'>";
+            if (activeFile && activeFile.isImage) {
+                html += "<img src='" + activeFile.url + "' style='max-width:160px; max-height:110px; object-fit:contain; border:1px solid #cbd5e1;'>";
+            } else if (activeFile && activeFile.isAudio) {
+                html += "<audio controls src='" + activeFile.url + "' style='height:32px;'></audio>";
+            } else if (activeFile && activeFile.isVideo) {
+                html += "<video controls src='" + activeFile.url + "' style='max-width:180px; max-height:110px;'></video>";
+            }
+            html += "<div style='text-align:left; font-size:11px;'>" +
+                "<div><strong>Point ID:</strong> " + self.escapeHTML(activePt.id) +
+                " &nbsp;|&nbsp; <strong>Class:</strong> " + self.escapeHTML(clsName) +
+                " &nbsp;|&nbsp; <strong>Coords:</strong> (" + Number(activePt.x).toFixed(3) + ", " + Number(activePt.y).toFixed(3) + ")</div>" +
+                "<div><strong>Associated File:</strong> " + self.escapeHTML(activeFile ? activeFile.name : self.getExportInstanceName(activePt.id)) +
+                (activeFile ? (" <a href='" + activeFile.url + "' target='_blank' rel='noopener'>Open</a>") : "") + "</div>" +
+                (activeFile && activeFile.isText ? "<pre id='activepointtextpreview' style='max-height:70px; overflow:auto; margin:4px 0 0 0; padding:4px; background:#f1f5f9; font-size:10px;'>Loading text preview...</pre>" : "") +
+                "</div></div>";
+        }
+
+        // Grid of associated files for shown/selected points
+        var displayIds = ids.slice(0, 48);
+        html += "<div class='point-files-grid'>";
+        for (var j = 0; j < displayIds.length; ++j) {
+            var pid = displayIds[j];
+            var pt = pointById[String(pid)];
+            var pf = self.getPointFile(pid);
+            var fname = pf ? pf.name : self.getInstanceLabel(pid);
+            var cls = pt ? (targetNames[pt.t] !== undefined ? targetNames[pt.t] : pt.t) : "";
+            var activeCls = (String(pid) === String(self.activePointId)) ? " active" : "";
+            html += "<div class='point-file-card" + activeCls + "' onclick='GFFOBJ.showPointFileDetails(" + JSON.stringify(pid) + ");' title='" + self.escapeHTML(fname) + "'>";
+            if (pf && pf.isImage) {
+                html += "<img class='point-file-thumb' src='" + pf.url + "' alt='" + self.escapeHTML(fname) + "'>";
+            } else {
+                var icon = pf && pf.isAudio ? "fa-file-audio" : (pf && pf.isVideo ? "fa-file-video" : (pf && pf.isText ? "fa-file-alt" : "fa-file"));
+                html += "<div class='point-file-thumb' style='display:flex; align-items:center; justify-content:center; color:#475569;'><i class='fa " + icon + " fa-2x'></i></div>";
+            }
+            html += "<div class='point-file-name'>" + self.escapeHTML(fname) + "</div>" +
+                "<div class='point-file-meta'>ID " + self.escapeHTML(pid) + (cls !== "" ? (" · " + self.escapeHTML(cls)) : "") + "</div>" +
+                "</div>";
+        }
+        html += "</div>";
+
+        panel.innerHTML = html;
+        panel.style.display = "block";
+
+        // Async load text preview if active point is a text file
+        if (self.activePointId !== null) {
+            var af = self.getPointFile(self.activePointId);
+            if (af && af.isText && af.file) {
+                var pre = gelem("activepointtextpreview");
+                if (af.textPreview !== null) {
+                    if (pre) pre.textContent = af.textPreview;
+                } else {
+                    var reader = new FileReader();
+                    reader.onload = function (ev) {
+                        af.textPreview = String(ev.target.result || "").slice(0, 1000);
+                        var el = gelem("activepointtextpreview");
+                        if (el) el.textContent = af.textPreview;
+                    };
+                    reader.readAsText(af.file.slice(0, 2048));
+                }
+            }
+        }
     };
 
 
@@ -387,10 +709,10 @@ function GraphFromFeatures() {
                     ? self.datagff.layoutfeature["graph"].nodes : [];
         for(var i of self.featureselected){
             var node = nodes[i];
-            if (!node) continue;
+            if (!node || node.category == 1) continue;
             var tid = node.label;
             var entry = self.USFOBJ.at(tid);
-            if (entry && entry.value == 0){
+            if (!entry || entry.value == 0){
                 featureselectedTrueIds.push(tid);
             }
         }
@@ -922,6 +1244,16 @@ function GraphFromFeatures() {
     this.onInstanceSelectionChanged = function (groupA, groupB) {
         groupA = Array.isArray(groupA) ? groupA : [];
         groupB = Array.isArray(groupB) ? groupB : [];
+        if (self.pointFileList.length > 0) {
+            var combinedIds = groupA.concat(groupB);
+            if (combinedIds.length > 0) {
+                self.renderPointFilesPanel(combinedIds);
+            } else {
+                var pts = (self.datagff && self.datagff.layoutinstance && Array.isArray(self.datagff.layoutinstance.points))
+                    ? self.datagff.layoutinstance.points : [];
+                self.renderPointFilesPanel(pts.slice(0, 36).map(function (pt) { return pt.id; }));
+            }
+        }
         if (self.datafileselected == "" || groupA.length === 0) {
             self.contrastiveData = null;
             self.refreshFeatureNodeStyles();
@@ -1471,27 +1803,20 @@ function GraphFromFeatures() {
         self.applyXAIAttributesToGraph(ds);
 
         if ("fenames" in ds) {
-            strs = "";
-            stro = "";
-            i = 0;
+            var strs = "";
+            var i = 0;
             for (var item of ds["fenames"]) {
                 self.lfenamesindex[item] = i;
-                strs += "<option value='" + i + "'>" + item + "</option>";
-                stro += "<option value='" + i + "'>" + item + "</option>";
+                strs += "<option value='" + i + "'>" + self.escapeHTML(item) + "</option>";
                 i++;
             }
             gelem("target").innerHTML = strs;
             gelem("target").selectedIndex = Object.keys(self.lfenamesindex).length - 1;
             self.target = self.getTargetId();
-            
-            gelem("idinstanceslabels").innerHTML = stro;
-            gelem("idinstanceslabels").selectedIndex = 0;
-            //begin new code
-            self.getUnselecteFeatures();
-            //////////////////////////////
 
+            self.populateInstanceIdDropdown();
+            self.getUnselecteFeatures();
         }
-        //console.log("DDDDDDDDDDDDDDDDDDS", ds["lastversion"], ds["versionfeature"]);
         if ("lastversion" in ds && "versionfeature" in ds && ds["lastversion"] == ds["versionfeature"]) {
            
             if ("configfeature" in ds) {
@@ -1502,17 +1827,21 @@ function GraphFromFeatures() {
                     if (self.target >= 0 && self.target < gelem("target").options.length) {
                         gelem("target").selectedIndex = self.target;
                     }
-                    
+                    self.populateInstanceIdDropdown();
                 }
-                    confins = ds["configinstance"] || {};
-                    if ("idinstanceslabels" in confins && confins["idinstanceslabels"]!="") {
-                        const num = parseInt(confins["idinstanceslabels"], 10);
-                        idcollabel = isNaN(num) ? 0 : num;
-                        gelem('idinstanceslabels').selectedIndex = idcollabel;
+                var confins = ds["configinstance"] || {};
+                if ("idinstanceslabels" in confins && String(confins["idinstanceslabels"]).trim() !== "") {
+                    var savedIdVal = String(confins["idinstanceslabels"]).trim();
+                    if (savedIdVal !== String(self.target)) {
+                        gelem('idinstanceslabels').value = savedIdVal;
+                        self.makeInstancesLabels(savedIdVal);
+                    } else {
+                        gelem('idinstanceslabels').value = "";
                     }
-                    else{
-                        gelem('idinstanceslabels').selectedIndex = 0;
-                    }
+                }
+                else {
+                    gelem('idinstanceslabels').value = "";
+                }
 
                 if ("proximity" in conf) {
                     gelem('proximity').value = conf["proximity"];
@@ -1528,19 +1857,18 @@ function GraphFromFeatures() {
                 }
 
 
-                //add feature selected
-                //add is target is included
+                // Restore include-target state without mutating the saved feature selection count
                 if ("intarget" in conf) {
-                    self.intargetaction = conf["intarget"];
-                    self.intarget = conf["intarget"];
+                    self.syncInTargetState(!!conf["intarget"]);
+                } else {
+                    self.syncInTargetState(false);
                 }
                 if (Object.keys(ds.layoutfeature.graph.nodes).length > 0 ) {
                     self.auxfeatureselectedf = self.makeFeatureAux(ds.layoutfeature.graph.nodes);
                 }
                 if ("featureselected" in conf) {
-
                     self.featureselected = self.setfeatureselected(conf["featureselected"]);
-                    //console.log("XXXconf[featureselected]", conf["featureselected"], self.featureselected);
+                    self.normalizeFeatureSelection();
                 }
 
                 /* 
@@ -1611,7 +1939,8 @@ function GraphFromFeatures() {
                                 d3.select("#seqedgehist").selectAll("svg").remove();
                             }
 
-                            self.changeintarget();
+                            // Highlight restored selection without toggling intarget or changing feature count
+                            self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
                         }
                         else {
                             gelem("topleft1").innerHTML = "Feature layout unavailable";
@@ -1646,15 +1975,17 @@ function GraphFromFeatures() {
                     gelem('instanceproximity').value = conf["instanceproximity"];
                 }
 
-                if ("idinstanceslabels" in conf && conf["idinstanceslabels"]!="") {
-                    //idcollabel = parseInt(conf["idinstanceslabels"])
-                    const num = parseInt(conf["idinstanceslabels"], 10);
-                    idcollabel = isNaN(num) ? 0 : num;
-                    console.log("idcollabel", idcollabel);
-                    gelem('idinstanceslabels').selectedIndex = idcollabel;
+                if ("idinstanceslabels" in conf && String(conf["idinstanceslabels"]).trim() !== "") {
+                    var savedCol = String(conf["idinstanceslabels"]).trim();
+                    if (savedCol !== String(self.target)) {
+                        gelem('idinstanceslabels').value = savedCol;
+                        self.makeInstancesLabels(savedCol);
+                    } else {
+                        gelem('idinstanceslabels').value = "";
+                    }
                 }
                 else{
-                    gelem('idinstanceslabels').selectedIndex = 0;
+                    gelem('idinstanceslabels').value = "";
                 }
 
 
@@ -1681,6 +2012,9 @@ function GraphFromFeatures() {
 
                         if (self.datagff.configinstance && self.datagff.configinstance.nodes) {
                             self.auxfeatureselectedi = self.makeFeatureAux(self.datagff.configinstance.nodes);
+                        }
+                        if (self.pointFileList.length > 0) {
+                            self.rebindPointFilesToCurrentPoints();
                         }
                     }
                     else {
@@ -1767,8 +2101,8 @@ function GraphFromFeatures() {
         
         self.USFOBJ.close();
 
-        self.setfullScreen();
-
+        self.clearPointFiles();
+        self.idinstancelabel = {};
         self.cleanfeatures();
         self.cleaninstances();
 
@@ -2138,7 +2472,7 @@ function GraphFromFeatures() {
                 return name !== undefined && name !== null;
             });
             var targetname = self.datagff.fenames[parseInt(gvalue('target'), 10)];
-            chart_correlation("#visp", self.dataload || [], featurenames, targetname);
+            chart_correlation("#visp", self.dataload || [], featurenames, targetname, self.lwidth);
         }
         else {
             self.showProjectionPanelMessage(
@@ -2230,47 +2564,31 @@ function GraphFromFeatures() {
         datin = new DataIO();
         datin.argms["type"] = 12;
         datin.argms["file"] = iddb;
-        var url = "./query?data=" + JSON.stringify(datin);
+        var url = "./query?data=" + encodeURIComponent(JSON.stringify(datin));
         window.location.href = url;
     };
 
     this.export2dprojwhole = function () {
-        /* datin = new DataIO();
-        datin.argms["type"] = 16;
-        datin.argms["file"] = self.datafileselected;
-        var url = "./query?data=" + JSON.stringify(datin);
-        window.location.href = url; */
+        if (self.layoutinstance != null && self.layoutinstance.exwholeinstancesprj) {
+            self.layoutinstance.exwholeinstancesprj();
+        }
     };
 
     this.export2dprojselected = function () {
-        /* datin = new DataIO();
-        datin.argms["type"] = 16;
-        datin.argms["file"] = self.datafileselected;
-        var url = "./query?data=" + JSON.stringify(datin);
-        window.location.href = url; */
+        if (self.layoutinstance != null && self.layoutinstance.exselectedinstancesprj) {
+            self.layoutinstance.exselectedinstancesprj();
+        }
     };
 
     this.exportfeat2datafile = function () {   
-        if(Object.keys(self.datagff.layoutfeature.graph.nodes).length){
-            //MOPRO.show("download .data file");
+        if (self.datagff && self.datagff.layoutfeature && self.datagff.layoutfeature.graph &&
+            Array.isArray(self.datagff.layoutfeature.graph.nodes) &&
+            self.datagff.layoutfeature.graph.nodes.length > 0) {
             datin = new DataIO();
             datin.argms["type"] = 17;
             datin.argms["file"] = self.datafileselected;
-            var url = "./query?data=" + JSON.stringify(datin);
+            var url = "./query?data=" + encodeURIComponent(JSON.stringify(datin));
             window.location.href = url;
-            /*
-            window.open(
-                url,
-                '_blank'
-                );
-            */
-            //MOPRO.hide();
-            
-            /* setTimeout( function () {
-
-            }
-            , 1); */
-
         }
     };
 
@@ -2330,6 +2648,34 @@ function GraphFromFeatures() {
         ob.start();
     };
 
+
+    this.syncInTargetState = function (includeTarget) {
+        self.intarget = !!includeTarget;
+        self.intargetaction = !self.intarget;
+        self.changeintargetbtn();
+    };
+
+    this.populateInstanceIdDropdown = function () {
+        var selectEl = gelem("idinstanceslabels");
+        if (!selectEl) return;
+        var prevVal = selectEl.value;
+        var names = (self.datagff && Array.isArray(self.datagff.fenames)) ? self.datagff.fenames : [];
+        var targetId = String(self.target);
+        var html = "<option value=''>None</option>";
+        for (var i = 0; i < names.length; ++i) {
+            // Exclude the target column (e.g. Category) from SELECT ID dropdown
+            if (String(i) === targetId) {
+                continue;
+            }
+            html += "<option value='" + i + "'>" + self.escapeHTML(names[i]) + "</option>";
+        }
+        selectEl.innerHTML = html;
+        if (prevVal && prevVal !== targetId) {
+            selectEl.value = prevVal;
+        } else {
+            selectEl.value = "";
+        }
+    };
 
     this.changeintarget = function () {
         //console.log("self.featureselectedWWWWWWWWWW::", self.featureselected);
@@ -2443,19 +2789,36 @@ function GraphFromFeatures() {
         self.shifflayoutcontrols("iddatasetlayout");
         self.padmove(100);
 
-        gelem("vis").style.width = self.lwidth + "px";
-        gelem("vis").style.height = self.lwidth + "px";
-        gelem("vis").style.minHeight = self.lwidth + "px";
-        gelem("vis").style.minWidth = self.lwidth + "px";
-        gelem("vis").style.maxHeight = self.lwidth + "px";
-        gelem("vis").style.maxWidth = self.lwidth + "px";
+        var panelIds = ["idlayout1", "idlayout2", "vis", "visp"];
+        for (var pi = 0; pi < panelIds.length; ++pi) {
+            var pEl = gelem(panelIds[pi]);
+            if (pEl) {
+                pEl.style.width = self.lwidth + "px";
+                pEl.style.height = self.lwidth + "px";
+                pEl.style.minHeight = self.lwidth + "px";
+                pEl.style.minWidth = self.lwidth + "px";
+                pEl.style.maxHeight = self.lwidth + "px";
+                pEl.style.maxWidth = self.lwidth + "px";
+            }
+        }
 
-        gelem("visp").style.width = self.lwidth + "px";
-        gelem("visp").style.height = self.lwidth + "px";
-        gelem("visp").style.minHeight = self.lwidth + "px";
-        gelem("visp").style.minWidth = self.lwidth + "px";
-        gelem("visp").style.maxHeight = self.lwidth + "px";
-        gelem("visp").style.maxWidth = self.lwidth + "px";
+        // Lock outer panel columns (20px left strip + lwidth canvas + 26px right strip + 6px border + 6px padding = +58px)
+        var panelTotalWidth = self.lwidth + 58;
+        var outerPanels = ["gffPanelLeft", "gffPanelRight"];
+        for (var op = 0; op < outerPanels.length; ++op) {
+            var oEl = gelem(outerPanels[op]);
+            if (oEl) {
+                oEl.style.width = panelTotalWidth + "px";
+                oEl.style.minWidth = panelTotalWidth + "px";
+                oEl.style.maxWidth = panelTotalWidth + "px";
+            }
+        }
+        var bottomDock = gelem("gffBottomDock");
+        if (bottomDock) {
+            var dockWidth = (panelTotalWidth * 2) + 8;
+            bottomDock.style.width = dockWidth + "px";
+            bottomDock.style.maxWidth = dockWidth + "px";
+        }
 
         gelem("idlayout1bar").style.maxHeight = self.lwidth + "px";
         gelem("idlayout1bar").style.minHeight = self.lwidth + "px";
@@ -2518,23 +2881,28 @@ function GraphFromFeatures() {
         }
     };
     
-    this.save_as_svg = function (idp,title) {
+    this.save_as_svg = function (idp, title) {
+        var svgNode = d3.select(idp).select("svg").node();
+        if (!svgNode) {
+            self.mw.alert("Export SVG", "No visualization is currently rendered to export.");
+            return;
+        }
         $.get("./lib/style.css", function (cssContent) {
-            d3.select(idp).select("svg")
-                .append("defs").append("style").attr("type", "text/css").html(cssContent);
+            var clone = svgNode.cloneNode(true);
+            clone.setAttribute("version", "1.1");
+            clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+            clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+            var defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+            var style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+            style.setAttribute("type", "text/css");
+            style.textContent = cssContent || "";
+            defs.appendChild(style);
+            clone.insertBefore(defs, clone.firstChild);
 
-            var html = d3.select(idp).select("svg")
-                .attr("version", 1.1)
-                .attr("xmlns", "http://www.w3.org/2000/svg")
-                .node().parentNode.innerHTML;
-
-            var imgsrc = 'data:image/svg+xml;base64,' + btoa(html);
-
-            gelem("svgdataurl").href = "";
-            gelem("svgdataurl").download = self.datafileselectedname+"_"+title;
-
-            gelem("svgdataurl").href = imgsrc;
-            gelem("svgdataurl").click();
+            var serialized = new XMLSerializer().serializeToString(clone);
+            var fname = sanitizeExportFilename(self.datafileselectedname, "chart") + "_" +
+                sanitizeExportFilename(title, "view") + ".svg";
+            downloadBlobFile(serialized, fname, "image/svg+xml;charset=utf-8");
         });
     };
 
@@ -2707,6 +3075,7 @@ function GraphFromFeatures() {
 
     this.settarget = function () {
         self.target = self.getTargetId();
+        self.populateInstanceIdDropdown();
         self.USFOBJ.print();
     }
 

@@ -34,9 +34,16 @@ class PCAP(Projection):
             return np.zeros((X.shape[0], 2), dtype=float).tolist()
 
         components = min(self.p, X.shape[0], X.shape[1])
-        pca = PCA(n_components=components, svd_solver='randomized', random_state=7)
-        pca.fit(X)
-        X2 = pca.transform(X)
+        # Use exact deterministic full SVD whenever width is reasonable;
+        # only use seeded randomized SVD for very wide matrices.
+        if min(X.shape[0], X.shape[1]) <= 500:
+            X_work = np.asarray(X, dtype=np.float64)
+            pca = PCA(n_components=components, svd_solver='full')
+        else:
+            X_work = X
+            pca = PCA(n_components=components, svd_solver='randomized', random_state=7)
+        pca.fit(X_work)
+        X2 = pca.transform(X_work)
         if components == 1:
             X2 = np.column_stack([X2[:, 0], np.zeros(X2.shape[0])])
         return X2.tolist()

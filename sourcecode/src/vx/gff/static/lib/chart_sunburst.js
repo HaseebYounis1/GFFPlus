@@ -206,39 +206,32 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
         options = options || {};
         self.newSlice.selectAll(".main-arc")
             .style('stroke', '#ffffff')
-            .style('opacity', function(d){
-                return '0.35';
+            .style('stroke-width', 1)
+            .style('opacity', function () {
+                return ids.length > 0 ? '0.25' : '1.0';
             });
 
         var esel = gelem(self.argms["infright"]);
         esel.innerHTML = "/ SELECTED: " + ids.length;
 
         if (ids.length > 0) {
-
             var filterfe = [];
             for (var i of ids) {
-                //filterfe.push(self.graph.nodes[i].label);
-                filterfe.push(selft.datagff.fenames[self.graph.nodes[i].label]);
+                if (self.graph.nodes[i] && self.graph.nodes[i].category == 0) {
+                    filterfe.push(selft.datagff.fenames[self.graph.nodes[i].label]);
+                }
             }
-            gelem('fesenanetxt').value =  filterfe.join("&&");
+            gelem('fesenanetxt').value = filterfe.join("&&");
 
-            
             var selectionBArray = self.newSlice.selectAll(".main-arc").nodes();
-            // var selectionBArraytxt = self.text.selectAll("textPath").nodes();
-            //console.log("selectionBArray",selectionBArraytxt);
-            for (var i in ids) {
-                //console.log("IUIU:",i,ids[i]);
-                cir = selectionBArray[self.pppi[ids[i]]];
-                //cir.style.stroke = d3.color(cir.style.fill).darker();
-                //cir.style.strokeWidth = 2.25;
+            for (var j in ids) {
+                var cir = selectionBArray[self.pppi[ids[j]]];
                 if (cir) {
                     cir.style.opacity = "1.0";
+                    cir.style.stroke = "#111827";
+                    cir.style.strokeWidth = "2.5";
                 }
-
-
-                // txt = selectionBArraytxt[self.pppi[ids[i]]];
-                // txt.style.stroke = d3.color(cir.style.fill).darker();
-            }    
+            }
         }
         if (!options.silent) {
             selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});

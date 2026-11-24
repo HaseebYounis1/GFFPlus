@@ -53,6 +53,9 @@ class MakeProjection():
             if index != targeti and index not in seen_features:
                 featureselected.append(index)
                 seen_features.add(index)
+        # Canonical ordering guarantees identical projections and scores
+        # regardless of the order in which features were clicked or lassoed.
+        featureselected.sort()
         filefepath = Settings.DATA_PATH+argms["file"]+"/"
         filefe = filefepath+"transform.csv"
 

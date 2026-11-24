@@ -53,6 +53,8 @@ class XAIPipeline:
         self.rng = np.random.default_rng(self.random_state)
 
     def execute(self, data_path, argms, feature_names=None, unselectedfeids=None):
+        # Reset RNG on every execute() call so repeated runs are 100% reproducible
+        self.rng = np.random.default_rng(self.random_state)
         dataset_id = str(argms["file"])
         csv_path = os.path.join(data_path, dataset_id, "transform.csv")
         if not os.path.exists(csv_path):

@@ -202,38 +202,29 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         });
 
 
-    self.zoom = d3.zoom()
-        .scaleExtent([0.5, 15])
-        .on("zoom", zoomed);
-
-    function zoomed() {
-        self.transform = d3.event.transform;
-        self.container.attr("transform", self.transform);
-    }
-
-
-
-    //    self.svgw.call(drag);
-    ///////////////////////////////////////////
-    ///////////////////////////////////////////
-    ///////////////////////////////////////////
-
-
-
     d3.select(idview).selectAll("svg").remove();
-    self.svgw = d3.select(idview).append("svg")
+    self.svgRoot = d3.select(idview).append("svg")
         .attr("width", self.width)
         .attr("height", self.height)
-        .call(self.drag)
-        .call(self.zoom)
-        .append("g");
+        .call(self.drag);
+    self.svgw = self.svgRoot.append("g");
 
-    self.container = self.svgw.append("g")
+    self.container = self.svgw.append("g");
+
+    self.zoomController = createConstantZoom(self.svgRoot, function (t) {
+        self.transform = t;
+        self.container.attr("transform", self.transform);
+    }, { minScale: 0.25, maxScale: 20, hasLassoDrag: true });
+    self.zoom = self.zoomController.behavior;
+    self.zoomIn = self.zoomController.zoomIn;
+    self.zoomOut = self.zoomController.zoomOut;
+    self.resetZoom = self.zoomController.resetZoom;
 
     // elements for data join
     self.link = self.container.append("g").selectAll(".link");
     self.link2 = self.container.append("g").selectAll(".links");
     self.links = self.container.append("g").attr("class", "links");
+    self.selectionRing = self.container.append("g").attr("class", "selection-rings").selectAll(".node-selection-ring");
     self.contrastRing = self.container.append("g").attr("class", "contrast-rings").selectAll(".node-contrast-ring");
     self.node = self.container.append("g").selectAll(".node");
 
@@ -253,6 +244,19 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
 
     //draw nodes
     this.drawnodes = function () {
+        self.selectionRing = self.selectionRing.data(self.graph.nodes);
+        self.selectionRing.exit().remove();
+        self.selectionRing = self.selectionRing.enter().append("circle")
+            .attr("class", "node-selection-ring")
+            .attr("r", function (d) {
+                return (d.category == 1) ? 0 : (self.nodeRadius(d) + 4.8);
+            })
+            .style("fill", "rgba(255, 234, 0, 0.28)")
+            .style("stroke", "#d50000")
+            .style("stroke-width", 2.2)
+            .style("opacity", 0)
+            .style("pointer-events", "none");
+
         self.contrastRing = self.contrastRing.data(self.graph.nodes);
         self.contrastRing.exit().remove();
         self.contrastRing = self.contrastRing.enter().append("circle")
@@ -360,7 +364,6 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     };
     
     this.updatecolors = function () {
-        var selectionBArray = self.svgw.selectAll(".node").nodes();
         self.node
         .style("fill", function (d) {
             return (d.category == 1) ? '#ccc' : self.vertexcolorf(self.nodeColorMetric(d));
@@ -369,24 +372,26 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             return (d.category == 1) ? '#ccc' : "#fff";
         });
 
-        for (var i in selft.featureselected) {
-            cir = selectionBArray[selft.featureselected[i]];
-            if (!cir) {
-                continue;
-            }
-            var fillCol = d3.color(cir.style.fill);
-            cir.style.stroke = fillCol ? fillCol.darker() : "#333";
-            cir.style.strokeWidth = 2.25;
-            cir.style.opacity = "1.0";
-        }
+        self.highlightforce(selft.featureselected, {"silent": true});
     };
 
     this.updatesizecircle = function (pct) {
         self.sizecircleper = pct;
+        var selectedSet = {};
+        for (var s = 0; s < (selft.featureselected || []).length; ++s) {
+            selectedSet[selft.featureselected[s]] = 1;
+        }
         self.node
             .attr("r", function (d) {
-                return self.nodeRadius(d);
+                var base = self.nodeRadius(d);
+                return (d.category == 0 && selectedSet[d.name]) ? (base + 2.2) : base;
             });
+        if (self.selectionRing) {
+            self.selectionRing
+                .attr("r", function (d) {
+                    return (d.category == 1) ? 0 : (self.nodeRadius(d) + 4.8);
+                });
+        }
         if (self.contrastRing) {
             self.contrastRing
                 .attr("r", function (d) {
@@ -493,6 +498,10 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             .attr("cy", function (d, i) { return re[i].y })
             .attr("x", function (d, i) { return re[i].x })
             .attr("y", function (d, i) { return re[i].y });
+        if (self.selectionRing) {
+            self.selectionRing.attr("cx", function (d, i) { return re[i].x; })
+                .attr("cy", function (d, i) { return re[i].y; });
+        }
         if (self.contrastRing) {
             self.contrastRing.attr("cx", function (d, i) { return re[i].x; })
                 .attr("cy", function (d, i) { return re[i].y; });
@@ -531,60 +540,72 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     this.highlightforce = function (ids, options) {
         ids = ids || [];
         options = options || {};
-        var selectionBArray = self.svgw.selectAll(".node").nodes();
-        self.svgw.selectAll(".node")
-            .style("stroke", "white")
-            .style("stroke-width", function (d) {
-                return (d.category == 1) ? 0.0 : 0.75;
-            });
+        var selectedMap = {};
+        for (var k = 0; k < ids.length; ++k) {
+            selectedMap[ids[k]] = 1;
+        }
 
         var esel = gelem(self.argms["infright"]);
         esel.innerHTML = "/ SELECTED: " + ids.length;
         if (ids.length > 0) {
-
             if (self.iscoloslider) {
                 self.iscoloslider = false;
-                
                 self.viewlayoutgraphtree();
             }
 
-            self.svgw.selectAll(".node")
-                .style("opacity", function (d) {
-                    return (d.category == 1) ? 1.0 : 0.5;
-                })
-                .style("stroke-width", function (d) {
-                    return (d.category == 1) ? 0.0 : 0.75;
-                });
-
             var filterfe = [];
-            //console.log("idsidsids", ids)
             for (var i of ids) {
-                filterfe.push(selft.datagff.fenames[self.graph.nodes[i].label]);
+                if (self.graph.nodes[i] && self.graph.nodes[i].category == 0) {
+                    filterfe.push(selft.datagff.fenames[self.graph.nodes[i].label]);
+                }
             }
             gelem('fesenanetxt').value = filterfe.join("&&");
         }
         else {
             selft.keepselectvertex = -1;
             self.iscoloslider = true;
-            
             self.viewlayoutgraphtree();
-
-            self.svgw.selectAll(".node")
-                .style("opacity", 1.0);
-
-
             esel.innerHTML = "/ SELECTED: " + 0;
         }
-        
-        for (var i in ids) {
-            cir = selectionBArray[ids[i]];
-            if (cir) {
-                var fillCol = d3.color(cir.style.fill);
-                cir.style.stroke = fillCol ? fillCol.darker() : "#333";
-                cir.style.strokeWidth = 2.25;
-                cir.style.opacity = "1.0";
+
+        self.node
+            .attr("r", function (d) {
+                var base = self.nodeRadius(d);
+                return (d.category == 0 && selectedMap[d.name]) ? (base + 2.2) : base;
+            })
+            .style("opacity", function (d) {
+                if (ids.length === 0) return 1.0;
+                if (d.category == 1) return 0.35;
+                return selectedMap[d.name] ? 1.0 : 0.22;
+            })
+            .style("stroke", function (d) {
+                if (d.category == 1) return "#ccc";
+                return selectedMap[d.name] ? "#111827" : "#ffffff";
+            })
+            .style("stroke-width", function (d) {
+                if (d.category == 1) return 0.0;
+                return selectedMap[d.name] ? 2.8 : 0.75;
+            });
+
+        // Raise selected nodes above unselected nodes so they are always clearly visible
+        self.node.filter(function (d) {
+            return d.category == 0 && !!selectedMap[d.name];
+        }).each(function () {
+            if (this.parentNode) {
+                this.parentNode.appendChild(this);
             }
+        });
+
+        if (self.selectionRing) {
+            self.selectionRing
+                .attr("r", function (d) {
+                    return (d.category == 1) ? 0 : (self.nodeRadius(d) + 5.2);
+                })
+                .style("opacity", function (d) {
+                    return (d.category == 0 && selectedMap[d.name]) ? 0.95 : 0.0;
+                });
         }
+
         self.applyContrastiveStyles();
         if (!options.silent) {
             selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});
@@ -703,6 +724,10 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
         else {
             self.node.attr("cx", function (d) { return (self.width / 2) + d.x; })
                 .attr("cy", function (d) { return (self.height / 2) + d.y; });
+            if (self.selectionRing) {
+                self.selectionRing.attr("cx", function (d) { return (self.width / 2) + d.x; })
+                    .attr("cy", function (d) { return (self.height / 2) + d.y; });
+            }
             if (self.contrastRing) {
                 self.contrastRing.attr("cx", function (d) { return (self.width / 2) + d.x; })
                     .attr("cy", function (d) { return (self.height / 2) + d.y; });
@@ -784,12 +809,9 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
 
 
     self.translatte = function (vx, vy) {
-        cent = { "k": self.transform.k, "x": vx, "y": vy };
-
-        self.transform.x += vx * self.transform.k;
-        self.transform.y += vy * self.transform.k;
-
-        self.container.attr("transform", self.transform);
+        if (self.zoomController) {
+            self.zoomController.translateBy(vx, vy);
+        }
     };
 
     self.viewlayoutgraphtree = function(d=null){

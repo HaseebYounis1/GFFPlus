@@ -66,13 +66,11 @@ function chart_circlepack(idview, selft, vertexcolorf){
     var focus = self.root,
       nodes = pack(self.root).descendants(),
       view;
-    console.log("nodes", nodes);
     var circle = g.selectAll("circle")
     .data(nodes)
     .enter().append("circle")
       .attr("class", function(d) { return d.parent ? d.children ? "nodex" : "nodex nodex--leaf" : "nodex nodex--root"; })
-      .style("fill", function(d) { 
-        console.log("d.id", d.id);
+      .style("fill", function(d) {
         return d.children ? color(d.depth) : self.vertexcolorf(self.nodeColorMetric(self.graph.nodes[d.data.id])); })
       .on("click", function(d) {
         if (!d.children && d.data && d.data.id !== undefined && self.graph.nodes[d.data.id] && self.graph.nodes[d.data.id].category == 0) {
@@ -137,7 +135,7 @@ function chart_circlepack(idview, selft, vertexcolorf){
         .style("stroke", "white")
         .style("stroke-width", 0.75)
         .style("opacity", function(d) {
-          return ids.length > 0 && !d.children ? 0.35 : 1.0;
+          return ids.length > 0 && !d.children ? 0.25 : 1.0;
         });
 
       var selected = {};
@@ -149,10 +147,8 @@ function chart_circlepack(idview, selft, vertexcolorf){
           return d.data && selected[d.data.id];
         })
         .style("opacity", 1.0)
-        .style("stroke", function() {
-          return d3.color(this.style.fill).darker();
-        })
-        .style("stroke-width", 2.25);
+        .style("stroke", "#d50000")
+        .style("stroke-width", 3.0);
 
       if (!options.silent) {
         selft.onFeatureSelectionChanged({"skipFeatureHighlight": true});

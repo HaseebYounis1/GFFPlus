@@ -6,54 +6,105 @@
 
 
 function chart_palettecolors(functionT, id, w, h, colorf) {
-    // w = 20;
-    // h = 500;
-    //console.log(coloresi);
-    gelem(id).setAttribute("width", w+"px");
-    gelem(id).setAttribute("height", h+"px");
+    gelem(id).setAttribute("width", w + "px");
+    gelem(id).setAttribute("height", h + "px");
 
-    // var interpolate = d3.interpolateRgbBasis(coloresi);
     var n = 100;
-
-    // var colores = d3.range(n).map(function(d) {
-    //   return interpolate(d/(n-1));
-    // });
-
     var data = Array.from(Array(n).keys());
+    var handleHeight = 10;
+    var usableH = Math.max(1, h - handleHeight);
+    var currentY = h; // starts at bottom (threshold = 0)
+    var lastCommittedT = -1;
+    var dragStartY = 0;
+    var dragStartHandleY = h;
+    var dragSensitivity = 0.45; // damped drag sensitivity for fine control
+    var stepSize = 0.02; // 2% threshold quantization to prevent jitter
 
     var xScale = d3.scaleLinear()
-        .domain([0,n-1])
+        .domain([0, n - 1])
         .range([0, h]);
 
-    idview = "#"+id;
+    var idview = "#" + id;
 
+    function clampY(y) {
+        if (y < handleHeight) return handleHeight;
+        if (y > h) return h;
+        return y;
+    }
+
+    function yToThreshold(y) {
+        var raw = (h - clampY(y)) / usableH;
+        var quantized = Math.round(raw / stepSize) * stepSize;
+        return Math.max(0.0, Math.min(1.0, quantized));
+    }
+
+    function thresholdToY(t) {
+        return clampY(h - (t * usableH));
+    }
+
+    function showThresholdTooltip(t) {
+        var evt = d3.event && d3.event.sourceEvent ? d3.event.sourceEvent : d3.event;
+        if (evt && typeof GFFOBJ !== "undefined" && GFFOBJ && GFFOBJ.setToolpiltex) {
+            GFFOBJ.setToolpiltex(evt.pageX + 12, evt.pageY, "Threshold: " + Math.round(t * 100) + "%");
+        }
+    }
+
+    function hideThresholdTooltip() {
+        if (typeof GFFOBJ !== "undefined" && GFFOBJ && GFFOBJ.hideToolpiltex) {
+            GFFOBJ.hideToolpiltex();
+        }
+    }
+
+    function applyHandleVisual(y) {
+        currentY = clampY(y);
+        bars.attr("transform", "translate(0, " + (currentY - h) + ")");
+    }
+
+    function commitThreshold(y, force) {
+        var t = yToThreshold(y);
+        var snappedY = thresholdToY(t);
+        applyHandleVisual(snappedY);
+        showThresholdTooltip(t);
+        if (force || Math.abs(t - lastCommittedT) >= stepSize - 1e-6) {
+            lastCommittedT = t;
+            functionT(t);
+        }
+    }
 
     var dragg = d3.drag()
-        .on("start", function() {
-            
+        .on("start", function () {
+            dragStartY = d3.mouse(this)[1];
+            dragStartHandleY = currentY;
+            showThresholdTooltip(yToThreshold(currentY));
         })
-        .on("drag", function() {
-            var coords = d3.mouse(this);
-            //console.log("coords",coords);
-            updatecolorbar2featureselection(d3.event.y);
+        .on("drag", function () {
+            var pointerY = d3.mouse(this)[1];
+            var deltaY = (pointerY - dragStartY) * dragSensitivity;
+            var nextY = clampY(dragStartHandleY + deltaY);
+            applyHandleVisual(nextY);
+            showThresholdTooltip(yToThreshold(nextY));
         })
         .on("end", function () {
+            commitThreshold(currentY, true);
+            hideThresholdTooltip();
+        });
 
-        });    
-
-
-
-    d3.select("#"+id).selectAll("svg").remove();
+    d3.select(idview).selectAll("svg").remove();
     var svgmain = d3.select(idview).append("svg")
         .attr("width", w)
         .attr("height", h)
+        .style("cursor", "ns-resize")
         .call(dragg)
-        .on("click",    function() {
+        .on("click", function () {
+            if (d3.event.defaultPrevented) {
+                return;
+            }
             var coords = d3.mouse(this);
-            updatecolorbar2featureselection(coords[1]);
-            //console.log(coords);    
+            commitThreshold(coords[1], true);
         })
-        .attr("transform", "translate(" + 0 + "," + 0 + ")")
+        .on("mouseout", function () {
+            hideThresholdTooltip();
+        })
         .append("g");
 
     var palette = svgmain.append("g").selectAll(".rectclass");
@@ -64,46 +115,26 @@ function chart_palettecolors(functionT, id, w, h, colorf) {
     palette = palette.enter().append("rect")
         .attr("class", "rectclass")
         .attr("x", 0)
-        .attr("y", (d) => Math.floor(xScale(d)))
+        .attr("y", function (d) { return Math.floor(xScale(d)); })
         .attr("width", w)
-        .attr("height", (d) => {
-            if (d == n-1) {
+        .attr("height", function (d) {
+            if (d == n - 1) {
                 return 6;
             }
-            return Math.floor(xScale(d+1)) - Math.floor(xScale(d)) + 1;
+            return Math.floor(xScale(d + 1)) - Math.floor(xScale(d)) + 1;
         })
-//        .attr("fill", (d) => cScale(d));
-        .attr("fill", (d) => colorf(1-(d/(n-1))));
-        //.attr("transform", "translate("+w+","+h+") rotate(180)");
-
-
+        .attr("fill", function (d) { return colorf(1 - (d / (n - 1))); });
 
     bars.selectAll(".splitermove").remove();
     bars
         .append("rect")
         .attr("class", "splitermove")
         .attr("x", 0)
-        .attr("y", h-10)
+        .attr("y", h - handleHeight)
         .attr("width", w)
-        .attr("height", 10)
-        .attr("fill", "#999")
-        .attr('stroke', 'black')
-        .style("stroke-width", 0.25);
-
-    function updatecolorbar2featureselection(y1){
-        if(y1<10) y1=10;
-
-        if(y1>=(h)) y1=(h);
-
-        T = ((h-10)-(y1-10))/((h-10));
-
-        //layout.layoutfeatures.T1 = T;
-        functionT(T);
-        //layout.layoutfeatures.selectbythreshold();
-        //console.log("y1",y1, (h-10));
-
-        bars.attr("transform", "translate(0, "+(y1-h)+")");
-        //bars.attr("y", y1);
-    }
+        .attr("height", handleHeight)
+        .attr("fill", "#222")
+        .attr("stroke", "#fff")
+        .style("stroke-width", 1.2);
 }
 

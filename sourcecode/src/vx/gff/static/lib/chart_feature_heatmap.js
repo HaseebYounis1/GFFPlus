@@ -22,12 +22,13 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
         .attr("width", self.width)
         .attr("height", self.height);
     self.viewport = self.svg.append("g");
-    self.zoom = d3.zoom()
-        .scaleExtent([0.5, 14])
-        .on("zoom", function () {
-            self.viewport.attr("transform", d3.event.transform);
-        });
-    self.svg.call(self.zoom);
+    self.zoomController = createConstantZoom(self.svg, function (t) {
+        self.viewport.attr("transform", t);
+    }, { minScale: 0.25, maxScale: 20 });
+    self.zoom = self.zoomController.behavior;
+    self.zoomIn = self.zoomController.zoomIn;
+    self.zoomOut = self.zoomController.zoomOut;
+    self.resetZoom = self.zoomController.resetZoom;
 
     self.getFeatureOrder = function () {
         var added = {};
@@ -105,7 +106,7 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
 
         self.svg.selectAll(".heatmap-label")
             .style("fill", function (d) {
-                return selected[d.name] ? "#ffffff" : "#d7dbea";
+                return selected[d.name] ? "#d50000" : "#1f2937";
             })
             .style("font-weight", function (d) {
                 return selected[d.name] ? "bold" : "normal";
@@ -113,10 +114,10 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
 
         self.svg.selectAll(".heatmap-cell")
             .style("stroke", function (d) {
-                return selected[d.source] || selected[d.target] ? "#ffffff" : "#202638";
+                return selected[d.source] || selected[d.target] ? "#d50000" : "#202638";
             })
             .style("stroke-width", function (d) {
-                return selected[d.source] || selected[d.target] ? 0.9 : 0.35;
+                return selected[d.source] || selected[d.target] ? 1.4 : 0.35;
             });
 
         gelem("topleft1").innerHTML = "TOTAL: " + self.graph.nodes.filter(function (d) {
@@ -182,8 +183,9 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
         self.viewport.append("text")
             .attr("x", margin.left)
             .attr("y", 16)
-            .style("fill", "#ffffff")
+            .style("fill", "#1f2937")
             .style("font-size", "12px")
+            .style("font-weight", "600")
             .text("Feature similarity matrix ordered by the GFF tree");
 
         var heat = self.viewport.append("g")

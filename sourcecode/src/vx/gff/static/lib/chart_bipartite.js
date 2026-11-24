@@ -27,12 +27,13 @@ function chart_bipartite(idview, selft, vertexcolorf) {
         .attr("width", self.width)
         .attr("height", self.height);
     self.viewport = self.svg.append("g");
-    self.zoom = d3.zoom()
-        .scaleExtent([0.5, 12])
-        .on("zoom", function () {
-            self.viewport.attr("transform", d3.event.transform);
-        });
-    self.svg.call(self.zoom);
+    self.zoomController = createConstantZoom(self.svg, function (t) {
+        self.viewport.attr("transform", t);
+    }, { minScale: 0.25, maxScale: 20 });
+    self.zoom = self.zoomController.behavior;
+    self.zoomIn = self.zoomController.zoomIn;
+    self.zoomOut = self.zoomController.zoomOut;
+    self.resetZoom = self.zoomController.resetZoom;
 
     self.featureCandidates = function () {
         var picked = {};
@@ -209,11 +210,15 @@ function chart_bipartite(idview, selft, vertexcolorf) {
         }
 
         self.node.selectAll("circle")
+            .style("opacity", function (d) {
+                if (ids.length === 0 || d.type != "feature") return 0.92;
+                return selected[d.featureId] ? 1.0 : 0.28;
+            })
             .style("stroke", function (d) {
-                return d.type == "feature" && selected[d.featureId] ? "#ffffff" : "#263044";
+                return d.type == "feature" && selected[d.featureId] ? "#d50000" : "#263044";
             })
             .style("stroke-width", function (d) {
-                return d.type == "feature" && selected[d.featureId] ? 2.25 : 1;
+                return d.type == "feature" && selected[d.featureId] ? 3.2 : 1;
             });
 
         self.link.style("stroke-opacity", function (d) {
@@ -286,8 +291,9 @@ function chart_bipartite(idview, selft, vertexcolorf) {
         self.viewport.append("text")
             .attr("x", 12)
             .attr("y", 18)
-            .style("fill", "#ffffff")
+            .style("fill", "#1f2937")
             .style("font-size", "12px")
+            .style("font-weight", "600")
             .text("Bipartite graph: " + self.instances.length + " representative active instances from " + rows.length + " rows");
 
         self.link = self.viewport.append("g")
@@ -341,7 +347,7 @@ function chart_bipartite(idview, selft, vertexcolorf) {
             .attr("x", function (d) { return d.type == "feature" ? -8 : 8; })
             .attr("dy", 3)
             .attr("text-anchor", function (d) { return d.type == "feature" ? "end" : "start"; })
-            .style("fill", "#d7dbea")
+            .style("fill", "#1f2937")
             .style("font-size", "9px")
             .style("pointer-events", "none")
             .text(function (d) {

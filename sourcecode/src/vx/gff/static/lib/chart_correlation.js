@@ -4,7 +4,7 @@
 # E-mail: ivar@usp.br
 */
 
-function chart_correlation(idview, data, featuresels, target){
+function chart_correlation(idview, data, featuresels, target, panelSize){
     data = data || [];
     featuresels = featuresels || [];
     if (!Array.isArray(featuresels)) {
@@ -18,48 +18,26 @@ function chart_correlation(idview, data, featuresels, target){
       return;
     }
 
-    // Dimension of the whole chart. Only one size since it has to be square
+    // Dimension of the whole chart matches the fixed panel width so layout never shifts
     var marginWhole = {top: 10, right: 10, bottom: 10, left: 10},
-//    var marginWhole = {top: 0, right: 0, bottom: 0, left: 0},
-        sizeWhole = 800 - marginWhole.left - marginWhole.right,
-        scale = 1.0,
-        transform = d3.zoomIdentity;
-
-
-    var zoom = d3.zoom()
-        .scaleExtent([0, 8])
-        .on("zoom", zoomed);
-    function zoomed() {
-        scale = d3.event.transform.k;
-        transform = d3.event.transform;
-        svg.attr("transform", transform);
-    }
-
-    var drag = d3.drag()
-        .on("start", function() {
-
-        })
-        .on("drag", function(d) {
-            transform.x = ((d3.event.x))-(sizeWhole*scale)/2;
-            transform.y = ((d3.event.y))-(sizeWhole*scale)/2;
-            //console.log("7777777", transform);
-            svg.attr("transform", transform);
-        })
-        .on("end", function () {
-
-        });        
+        totalSize = Math.max(300, parseInt(panelSize, 10) || 520),
+        sizeWhole = totalSize - marginWhole.left - marginWhole.right;
 
     // Create the svg area
     d3.select(idview).selectAll("svg").remove();
-    var svg = d3.select(idview).append("svg")
-        .attr("width", sizeWhole  + marginWhole.left + marginWhole.right)
-        .attr("height", sizeWhole  + marginWhole.top + marginWhole.bottom)
-        .call(drag)
-        .call(zoom)
-        .attr("transform", "translate(" + marginWhole.left + "," + marginWhole.top + ")")
+    var svgRoot = d3.select(idview).append("svg")
+        .attr("width", totalSize)
+        .attr("height", totalSize)
         .style("font-size","25px")
-        .style("pointer-events", "all")
-        .append("g");
+        .style("pointer-events", "all");
+    var svg = svgRoot.append("g")
+        .attr("transform", "translate(" + marginWhole.left + "," + marginWhole.top + ")");
+
+    if (typeof createConstantZoom === "function") {
+        createConstantZoom(svgRoot, function (t) {
+            svg.attr("transform", "translate(" + marginWhole.left + "," + marginWhole.top + ") " + t);
+        }, { minScale: 0.25, maxScale: 20 });
+    }
 
 //    d3.csv("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/iris.csv", function(data) {
 

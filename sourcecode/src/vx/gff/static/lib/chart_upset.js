@@ -26,12 +26,13 @@ function chart_upset(idview, selft, vertexcolorf) {
         .attr("width", self.width)
         .attr("height", self.height);
     self.viewport = self.svg.append("g");
-    self.zoom = d3.zoom()
-        .scaleExtent([0.5, 14])
-        .on("zoom", function () {
-            self.viewport.attr("transform", d3.event.transform);
-        });
-    self.svg.call(self.zoom);
+    self.zoomController = createConstantZoom(self.svg, function (t) {
+        self.viewport.attr("transform", t);
+    }, { minScale: 0.25, maxScale: 20 });
+    self.zoom = self.zoomController.behavior;
+    self.zoomIn = self.zoomController.zoomIn;
+    self.zoomOut = self.zoomController.zoomOut;
+    self.resetZoom = self.zoomController.resetZoom;
 
     self.selectbythreshold = function (T1) {
         var ids = [];
@@ -60,15 +61,15 @@ function chart_upset(idview, selft, vertexcolorf) {
                 return selected[d.nodeId] ? "bold" : "normal";
             })
             .style("fill", function (d) {
-                return selected[d.nodeId] ? "#ffffff" : "#d9dbe7";
+                return selected[d.nodeId] ? "#d50000" : "#1f2937";
             });
 
         self.svg.selectAll(".upset-set-dot")
             .style("stroke", function (d) {
-                return selected[d.nodeId] ? "#ffffff" : "none";
+                return d.set && selected[d.set.nodeId] ? "#d50000" : "none";
             })
             .style("stroke-width", function (d) {
-                return selected[d.nodeId] ? 2 : 0;
+                return d.set && selected[d.set.nodeId] ? 2.5 : 0;
             });
 
         gelem("topleft1").innerHTML = "TOTAL: " + self.graph.nodes.filter(function (d) {
@@ -243,8 +244,9 @@ function chart_upset(idview, selft, vertexcolorf) {
         self.viewport.append("text")
             .attr("x", margin.left)
             .attr("y", 14)
-            .style("fill", "#ffffff")
+            .style("fill", "#1f2937")
             .style("font-size", "12px")
+            .style("font-weight", "600")
             .text("Top intersections from selected or highest-ranked features");
 
         var bars = self.viewport.append("g")

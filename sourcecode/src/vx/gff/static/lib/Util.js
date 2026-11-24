@@ -57,10 +57,98 @@ function eraseCookie(name) {
 }
 function removechilds(elem) {
     if (elem.hasChildNodes){
-        for (var e of elem.childNodes){
-            elem.removeChild(e);
+        while (elem.firstChild) {
+            elem.removeChild(elem.firstChild);
         }
     }
+}
+
+/**
+ * Shared constant-step zoom controller for D3 v4 SVGs.
+ * Normalizes mouse-wheel deltas across browsers/trackpads so zoom-in/zoom-out
+ * steps are constant, avoids fighting with lasso drag, and exposes constant
+ * zoomIn / zoomOut / resetZoom / translateBy helpers.
+ */
+function createConstantZoom(svgSelection, onTransform, options) {
+    options = options || {};
+    var minScale = options.minScale !== undefined ? options.minScale : 0.25;
+    var maxScale = options.maxScale !== undefined ? options.maxScale : 20;
+    var stepFactor = options.stepFactor !== undefined ? options.stepFactor : 1.25;
+    var wheelStep = options.wheelStep !== undefined ? options.wheelStep : 0.18;
+    var hasLassoDrag = !!options.hasLassoDrag;
+
+    var zoomBehavior = d3.zoom()
+        .scaleExtent([minScale, maxScale])
+        .wheelDelta(function () {
+            var dy = d3.event.deltaY;
+            if (!dy) {
+                return 0;
+            }
+            // Constant step per wheel notch regardless of OS/browser deltaMode
+            return (dy > 0 ? -1 : 1) * wheelStep;
+        })
+        .filter(function () {
+            if (d3.event.type === "wheel") {
+                return true;
+            }
+            if (hasLassoDrag) {
+                // Allow middle-button or Alt+drag to pan without conflicting with lasso drag
+                return d3.event.button === 1 || !!d3.event.altKey;
+            }
+            return !d3.event.button;
+        })
+        .on("zoom", function () {
+            if (onTransform) {
+                onTransform(d3.event.transform);
+            }
+        });
+
+    svgSelection.call(zoomBehavior).on("dblclick.zoom", null);
+
+    return {
+        behavior: zoomBehavior,
+        zoomIn: function () {
+            svgSelection.transition().duration(140).call(zoomBehavior.scaleBy, stepFactor);
+        },
+        zoomOut: function () {
+            svgSelection.transition().duration(140).call(zoomBehavior.scaleBy, 1.0 / stepFactor);
+        },
+        resetZoom: function () {
+            svgSelection.transition().duration(180).call(zoomBehavior.transform, d3.zoomIdentity);
+        },
+        translateBy: function (dx, dy) {
+            var current = d3.zoomTransform(svgSelection.node());
+            var next = d3.zoomIdentity
+                .translate(current.x + dx * current.k, current.y + dy * current.k)
+                .scale(current.k);
+            svgSelection.call(zoomBehavior.transform, next);
+        },
+        getTransform: function () {
+            return d3.zoomTransform(svgSelection.node());
+        }
+    };
+}
+
+function downloadBlobFile(content, filename, mimeType) {
+    var blob = new Blob([content], { type: mimeType || "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(function () {
+        URL.revokeObjectURL(url);
+    }, 1500);
+}
+
+function sanitizeExportFilename(name, fallback) {
+    var cleaned = String(name || fallback || "export")
+        .replace(/[\\/:*?"<>|\r\n]+/g, "_")
+        .replace(/\s+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    return cleaned || (fallback || "export");
 }
 function setDict(dat, arr, val) {
     //console.log("arr, val", arr, val);

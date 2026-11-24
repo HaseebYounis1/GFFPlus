@@ -402,347 +402,156 @@
 
 
                 <div id="mainlayout" style="display: none;">
-                    <table style="margin: 0 auto;">
-                        <tr>
-                            <td style="text-align: center;">
-                                <div style="padding: 3px;">
-                                    <table style="width: 100%;
-                                           color: #fff
-                                    ">
-                                        <tr>
-                                            <!-- <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 70px; max-width: 70px;
-                                                     ">Name</div>
-                                            </td> -->
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 70px; max-width: 70px;
-                                                     ">TARGET</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 70px; max-width: 70px;
-                                                     ">PROXIMITY</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 70px; max-width: 70px;
-                                                     ">RELEVANCE</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 70px; max-width: 70px;
-                                                     ">ALGORITHM</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 70px; max-width: 70px;
-                                                     ">LAYOUT</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 140px; max-width: 70px;
-                                                     ">FEATURES</div>
-                                            </td>
-                                            <td style="width: 100%">
-
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </div>                                
-                                <div style="background-color: #c5cbdb; color: #000;">
-                                    <div style="padding: 3px;">
-                                        <div>
-                                            <table style="width: 100%">
-                                                <tr>
-                                                    <!-- <td>
-                                                        <select id="nameatt"
-                                                            class="form-control form-control-sm"
-                                                            style="min-width: 70px; max-width: 70px"
-                                                            onclick="
-                                                                GFFOBJ.target = this.value;
-                                                            "
-                                                            onchange="
-                                                                GFFOBJ.target = this.value;
-                                                            "
-                                                    >
-                                                            <option>None</option>
-                                                        </select>
-                                                    </td> -->
-                                                    <td>
-                                                        <select id="target"
-                                                            class="form-control form-control-sm"
-                                                            style="min-width: 70px; max-width: 70px"
-                                                            onclick="
-                                                                //GFFOBJ.target = this.value;
-                                                            "
-                                                            onchange="
-                                                                GFFOBJ.settarget();
-                                                                //USFOBJ.print();
-
-                                                            "
-                                                        >
-                                                            <option>None</option>
-                                                        </select>
-                                                    </td>
-                                                    <td>
-                                                        <select id="proximity"
-                                                            class="form-control form-control-sm"
-                                                            style="max-width: 70px; min-width: 70px"
-                                                        >
-    <!--                                                                    <option value="none">Proximity</option>-->
-                                                            <option value="Euclidean">Euclidean</option>
-                                                            <option value="Manhattan">Manhattan</option>
-                                                            <option value="Chebychev">Chebychev</option>
-                                                            <!-- <option value="Braycurtis">Braycurtis</option>
-                                                            <option value="Camberra">Camberra</option> -->
-                                                            <option value="Cosine" selected>Cosine</option>
-                                                            <option value="Pearson">Pearson</option>
-                                                            <!-- <option value="Correlation">Correlation</option> -->
-                                                            <!-- <option value="Gaussian">Gaussian</option> -->
-                                                        </select>
-                                                    </td>
-                                                    <td>
-                                                        <select id="relevance"
-                                                            class="form-control form-control-sm"
-                                                            style="max-width: 70px; min-width: 70px"
-                                                        >
-    <!--                                                                    <option value="none">Proximity</option>-->
-                                                            <option value="Pearson">Pearson</option>
-                                                            <!-- <option value="Correlation">Correlation</option> -->
-                                                            <option value="Extratrees">Extra-Trees</option>
-                                                            <!--<option value="Gaussian">Gaussian</option>-->
-                                                        </select>
-                                                    </td>
-                                                    <td>
-                                                        <select id="algorithm"
-                                                            class="form-control form-control-sm col-md-8"
-                                                            style="max-width: 70px; min-width: 70px"
-                                                        >
-                                                            <option value="mst">MST</option>
-                                                            <option value="nj">NJ</option>
-                                                        </select>
-                                                    </td>
-                                                    <td>
-                                                        <select id="layout"
-                                                            class="form-control form-control-sm col-md-8"
-                                                            style="max-width: 70px; min-width: 70px"
-                                                        >
-                                                            <option value="fo">Force</option>
-                                                            <option value="cb">Bundle</option>
-                                                            <option value="sb">Sunburst</option>
-                                                            <option value="pk">Pack</option>
-                                                            <option value="hm">Heatmap</option>
-                                                            <option value="cm">Community</option>
-                                                            <option value="bp">Bipartite</option>
-                                                            <option value="up">UpSet</option>
-                                                        </select>
-                                                    </td>
-                                                    <td>
-                                                        <!-- 
-                                                        <div class="btn-group">
-                                                            <button type="button"
-                                                                class="btn btn-danger btn-sm dropdown-toggle"
-                                                                aria-haspopup="true"
-                                                                aria-expanded="false"
-                                                                style="max-width: 70px; min-width: 70px"
-                                                                id="idselectedfebt"
-                                                            >
-                                                                Features
-                                                            </button>
-                                                        </div>
-                                                         -->
-                                                        <div
-                                                            id="idselectedfebt"
-                                                            class="btn-group" role="group" aria-label="Basic example"
-                                                        >
-                                                            <button type="button" 
-                                                                class="btn btn-primary btn-sm"
-                                                                style="width: 70px;"
-                                                            >
-                                                                Select
-                                                            </button>
-                                                            <button type="button"
-                                                                class="btn btn-danger btn-sm dropdown-toggle"
-                                                                style="width: 70px;"
-                                                            >
-                                                                Unselect
-                                                            </button>
-                                                        </div>                                                        
-                                                        <div id="idunselectedfecont"></div>
-                                                    </td>
-                                                    <td style="width: 100%; text-align: right;">
-                                                        <p class="bs-component" style="margin: 0; padding: 0;">
-                                                            <a href="#" class="btn btn-info btn-sm"
-                                                                onclick="
-                                                                    GFFOBJ.runXAI();
-                                                                "
-                                                                title="Run local XAI"
-                                                                style="margin-right: 2px;"
-                                                            >
-                                                                <i class="fa fa-brain fa-lg"
-                                                                   style="padding: 0;margin: 0"
-                                                                   ></i>
-                                                            </a>
-                                                            <a href="#" class="btn btn-secondary btn-sm"
-                                                                onclick="
-                                                                    GFFOBJ.setXAIImportanceColorMode();
-                                                                "
-                                                                title="XAI Importance node color"
-                                                                style="margin-right: 2px;"
-                                                            >
-                                                                <i class="fa fa-palette fa-lg"
-                                                                   style="padding: 0;margin: 0"
-                                                                   ></i>
-                                                            </a>
-                                                            <a href="#" class="btn btn-secondary btn-sm"
-                                                                onclick="
-                                                                    GFFOBJ.setXAIImportanceSizeMode();
-                                                                "
-                                                                title="XAI Importance node size"
-                                                                style="margin-right: 2px;"
-                                                            >
-                                                                <i class="fa fa-expand-alt fa-lg"
-                                                                   style="padding: 0;margin: 0"
-                                                                   ></i>
-                                                            </a>
-                                                            <a href="#" class="btn btn-dark btn-sm"
-                                                                onclick="
-                                                                    GFFOBJ.showSHAPSimilarityGraph();
-                                                                "
-                                                                title="SHAP similarity graph"
-                                                                style="margin-right: 2px;"
-                                                            >
-                                                                <i class="fa fa-project-diagram fa-lg"
-                                                                   style="padding: 0;margin: 0"
-                                                                   ></i>
-                                                            </a>
-                                                            <input id="xaithreshold" type="range" min="0" max="100" value="0"
-                                                                title="XAI Importance threshold"
-                                                                style="width: 120px; vertical-align: middle; margin-right: 6px;"
-                                                                onchange="
-                                                                    GFFOBJ.selectXAIThreshold(this.value/100.0);
-                                                                "
-                                                            >
-                                                            <a href="#" class="btn btn-primary btn-sm"
-                                                                onclick="
-                                                                   //GFFOBJ.visFeatures();
-                                                                   
-                                                                   GFFOBJ.dequeSendFeaturesChecks();
-                                                                   
-                                                                   //GFFOBJ.dequeLoadDataset(xxxx);
-                                                                "
-                                                                title="Execute feature visualization"
-                                                                style="margin-right: 0;"
-                                                            >
-                                                              <!--&#9737;-->
-                                                              <!--&#9656;-->
-                                                                <i class="fa fa-play fa-lg"
-                                                                   style="padding: 0;margin: 0"
-                                                                   ></i>
-                                                            </a>
-                                                        </p>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                            <div style="height: 2px"></div>
-                                            <div id="xaiselectedsummary"
-                                                style="
-                                                    width: 100%;
-                                                    max-height: 165px;
-                                                    overflow: auto;
-                                                    color: #172033;
-                                                    background-color: #eef4ff;
-                                                    border: 1px solid #b8cae6;
-                                                    font-size: 10px;
-                                                    line-height: 1.25;
-                                                    padding: 4px 6px;
-                                                    display: none;
-                                                "
-                                            ></div>
+                    <div class="gff-panels-row" id="gffPanelsRow">
+                        <div id="gffPanelLeft" class="gff-panel-column">
+                                <div class="gff-toolbar-header">
+                                    <div style="display: flex; align-items: center; gap: 3px; width: 100%; color: #fff;">
+                                        <div style="font-size: 9px; flex: 0 0 56px; width: 56px; overflow: hidden;">TARGET</div>
+                                        <div style="font-size: 9px; flex: 0 0 56px; width: 56px; overflow: hidden;">PROXIMITY</div>
+                                        <div style="font-size: 9px; flex: 0 0 56px; width: 56px; overflow: hidden;">RELEVANCE</div>
+                                        <div style="font-size: 9px; flex: 0 0 46px; width: 46px; overflow: hidden;">ALG</div>
+                                        <div style="font-size: 9px; flex: 0 0 56px; width: 56px; overflow: hidden;">LAYOUT</div>
+                                        <div style="font-size: 9px; flex: 0 0 92px; width: 92px; overflow: hidden;">FEATURES</div>
+                                        <div style="font-size: 9px; flex: 1 1 auto; text-align: right;">XAI / RUN</div>
+                                    </div>
+                                </div>
+                                <div style="background-color: #c5cbdb; color: #000; padding: 3px; box-sizing: border-box;">
+                                        <div class="gff-toolbar-controls">
+                                            <select id="target"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 56px; width: 56px;"
+                                                onchange="GFFOBJ.settarget();"
+                                            >
+                                                <option>None</option>
+                                            </select>
+                                            <select id="proximity"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 56px; width: 56px;"
+                                            >
+                                                <option value="Euclidean">Euclidean</option>
+                                                <option value="Manhattan">Manhattan</option>
+                                                <option value="Chebychev">Chebychev</option>
+                                                <option value="Cosine" selected>Cosine</option>
+                                                <option value="Pearson">Pearson</option>
+                                            </select>
+                                            <select id="relevance"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 56px; width: 56px;"
+                                            >
+                                                <option value="Pearson">Pearson</option>
+                                                <option value="Extratrees">Extra-Trees</option>
+                                            </select>
+                                            <select id="algorithm"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 46px; width: 46px;"
+                                            >
+                                                <option value="mst">MST</option>
+                                                <option value="nj">NJ</option>
+                                            </select>
+                                            <select id="layout"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 56px; width: 56px;"
+                                            >
+                                                <option value="fo">Force</option>
+                                                <option value="cb">Bundle</option>
+                                                <option value="sb">Sunburst</option>
+                                                <option value="pk">Pack</option>
+                                                <option value="hm">Heatmap</option>
+                                                <option value="cm">Community</option>
+                                                <option value="bp">Bipartite</option>
+                                                <option value="up">UpSet</option>
+                                            </select>
+                                            <div style="position: relative; flex: 0 0 92px; width: 92px;">
+                                                <div id="idselectedfebt" class="btn-group btn-group-sm" role="group" style="width: 92px;">
+                                                    <button type="button" class="btn btn-primary btn-sm" style="width: 44px; font-size: 10px; padding: 3px 2px;">Sel</button>
+                                                    <button type="button" class="btn btn-danger btn-sm dropdown-toggle" style="width: 48px; font-size: 10px; padding: 3px 2px;">Unsel</button>
+                                                </div>
+                                                <div id="idunselectedfecont"></div>
+                                            </div>
+                                            <div style="flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 2px;">
+                                                <a href="#" class="btn btn-info btn-sm"
+                                                    onclick="event.preventDefault(); GFFOBJ.runXAI();"
+                                                    title="Run local XAI"
+                                                >
+                                                    <i class="fa fa-brain" style="padding: 0; margin: 0;"></i>
+                                                </a>
+                                                <a href="#" class="btn btn-secondary btn-sm"
+                                                    onclick="event.preventDefault(); GFFOBJ.setXAIImportanceColorMode();"
+                                                    title="XAI Importance node color"
+                                                >
+                                                    <i class="fa fa-palette" style="padding: 0; margin: 0;"></i>
+                                                </a>
+                                                <a href="#" class="btn btn-secondary btn-sm"
+                                                    onclick="event.preventDefault(); GFFOBJ.setXAIImportanceSizeMode();"
+                                                    title="XAI Importance node size"
+                                                >
+                                                    <i class="fa fa-expand-alt" style="padding: 0; margin: 0;"></i>
+                                                </a>
+                                                <a href="#" class="btn btn-dark btn-sm"
+                                                    onclick="event.preventDefault(); GFFOBJ.showSHAPSimilarityGraph();"
+                                                    title="SHAP similarity graph"
+                                                >
+                                                    <i class="fa fa-project-diagram" style="padding: 0; margin: 0;"></i>
+                                                </a>
+                                                <input id="xaithreshold" type="range" min="0" max="100" value="0"
+                                                    title="XAI Importance threshold"
+                                                    style="flex: 1 1 36px; min-width: 30px; max-width: 72px; vertical-align: middle;"
+                                                    onchange="GFFOBJ.selectXAIThreshold(this.value/100.0);"
+                                                >
+                                                <a href="#" class="btn btn-primary btn-sm"
+                                                    onclick="event.preventDefault(); GFFOBJ.dequeSendFeaturesChecks();"
+                                                    title="Execute feature visualization"
+                                                >
+                                                    <i class="fa fa-play" style="padding: 0; margin: 0;"></i>
+                                                </a>
+                                            </div>
                                         </div>
 
+                                        <div class="gff-canvas-box gff-canvas-box-left">
+                                            <div class="gff-canvas-strip-left">
+                                                <div style="background-color: #000; padding: 1px;"
+                                                    title="Change colors (vertex)"
+                                                    onclick="
+                                                        GFFOBJ.colorstableshitttype = 1;
+                                                        CCTT.makeSelectionColorPalette(400, 10);
+                                                    "
+                                                >
+                                                    <img src="./img/wheel.png" style="width: 18px;" alt="">
+                                                </div>
+                                                <svg id="seq1" style="width: 20px"></svg>
+                                            </div>
+                                            <div class="gff-canvas-center">
+                                                <div id="idlayout1" style="position:relative;">
+                                                    <div id="vis"></div>
+                                                    <div id="idpadmover"
+                                                        style="
+                                                            position:absolute;
+                                                            bottom:25px;
+                                                            right: 0;
+                                                            border: 1px solid #333;
+                                                            z-index: 2;
+                                                            opacity: 0.8;
+                                                        "
+                                                    ></div>
 
-                                        <div style="
-                                                width: 100%;
-                                                color: #000;
-                                                border: 3px solid #029ff1;
-                                                background-color: #fff;
-                                             ">
-                                            <table>
-                                                <tr>
-                                                    <td style="vertical-align: top;">
-                                                        <div style="width: 20px; vertical-align: top;">
-                                                            <div style="background-color: #000; padding: 1px;"
-                                                                title="Change colors (vertex)"
-                                                                onclick="
-                                                                    GFFOBJ.colorstableshitttype = 1;
-                                                                    CCTT.makeSelectionColorPalette(400, 10);
-                                                                "
-                                                            >
-                                                                <img src="./img/wheel.png" style="width: 18px;" alt="">
-                                                            </div>
-                                                            <svg id="seq1" style="width: 20px"></svg>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div id="idlayout1" style="position:relative;">
-                                                            <div id="vis"></div>
-                                                            <div id="idpadmover"
-                                                                style="
-                                                                    position:absolute;
-                                                                    bottom:25px;
-                                                                    right: 0;
-                                                                    border: 1px solid #333;
-                                                                    z-index: 2;
-                                                                    opacity: 0.8;
-                                                                "
-                                                            >
-                                                                
-                                                            </div>
+                                                    <div class="gff-overlay-bar" style="top: 0;">
+                                                        <span id="topleft1">&nbsp;</span>
+                                                        <span id="topright1">&nbsp;</span>
+                                                    </div>
 
-                                                            <div style="
-                                                                display: table;
-                                                                width: 100%;
-                                                                color: #000;
-                                                                font-size: 9px;
-                                                                position: absolute;
-                                                                top: 0;
-                                                            "
-                                                            >
-                                                                <span id="topleft1" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                                <span id="topright1" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                            </div>
-
-                                                            <div style="
-                                                                display: table;
-                                                                width: 100%;
-                                                                color: #000;
-                                                                font-size: 9px;
-                                                                position: absolute;
-                                                                bottom: 0;
-                                                            "
-                                                            >
-                                                                <span id="infleft1" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                                <span id="infright1" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                            </div>
-                                                            <div id="seqedgehist" 
-                                                                style="
-                                                                    position: absolute;
-                                                                    bottom: 0;
-                                                                    margin: 0 auto;        
-                                                                "
-                                                            >
-                                                            </div>
+                                                    <div class="gff-overlay-bar" style="bottom: 0;">
+                                                        <span id="infleft1">&nbsp;</span>
+                                                        <span id="infright1">&nbsp;</span>
+                                                    </div>
+                                                    <div id="seqedgehist"
+                                                        style="
+                                                            position: absolute;
+                                                            bottom: 0;
+                                                            left: 0;
+                                                            right: 0;
+                                                            margin: 0 auto;
+                                                        "
+                                                    ></div>
                                                             <div id="featselectfeature" 
                                                                 style="
                                                                     position: absolute;
@@ -794,13 +603,12 @@
                                                                         margin-right: 24px;
                                                                         cursor: pointer;
                                                                     "
-                                                                    onclick="
-                                                                        gelem('featselectfeature').style.display = 'none';
-                                                                    "
-                                                                    title="Close"
+                                                                    title="Export as svg image"
                                                                 >
                                                                     <a href="#" class="btn btn-warning btn-sm"
                                                                         onclick="
+                                                                            event.preventDefault();
+                                                                            event.stopPropagation();
                                                                             GFFOBJ.save_as_svg('#featselectfeaturecontent','features');
                                                                         "
                                                                         title="Export as svg image"
@@ -818,18 +626,36 @@
                                                                     
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    </td>
-                                                    <td style="vertical-align: top;
-                                                        max-width: 24px;
-                                                        min-width: 24px;
-                                                        width: 24px;
-                                                        vertical-align: middle;
-                                                        "
-                                                    >
-                                                        <table id="idlayout1bar" style="width: 22px;">
+                                                </div>
+                                            </div>
+                                            <div class="gff-canvas-strip-right">
+                                                <table id="idlayout1bar" style="width: 22px;">
                                                             <tr>
                                                                 <td style="vertical-align: top;">
+                                                                    <div style="height: 3px"></div>
+                                                                    <a href="#" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.zoomFeatures('in');"
+                                                                        title="Zoom in (constant step)"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-search-plus" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
+                                                                    <div style="height: 2px"></div>
+                                                                    <a href="#" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.zoomFeatures('out');"
+                                                                        title="Zoom out (constant step)"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-search-minus" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
+                                                                    <div style="height: 2px"></div>
+                                                                    <a href="#" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.zoomFeatures('reset');"
+                                                                        title="Reset zoom"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-compress-arrows-alt" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
                                                                     <div style="height: 3px"></div>
                                                                     <a href="#" class="btn btn-dark btn-sm"
                                                                             onclick="
@@ -1127,285 +953,143 @@
                                                                 </td>
                                                             </tr>
                                                         </table>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                        </div>
-                                        <div>
-                                            <div style="vertical-align: bottom; height: 30px; padding: 5px">
-                                                <table style="width: 100%">
-                                                    <tr>
-                                                        <td>
-                                                            <div style="width: 20px;">
-                                                                <a
-                                                                    class="btn btn-dark btn-sm"
-                                                                    title="Shift"
-                                                                    style="width: 100%;
-                                                                        padding: 1px;
-                                                                    "
-                                                                    onclick="
-                                                                        if (GFFOBJ.exchageslider==0){
-                                                                            GFFOBJ.exchageslider = 180;
-                                                                        }
-                                                                        else{
-                                                                            GFFOBJ.exchageslider = 0;
-                                                                        }
-                                                                        gelem('edgeslider').style.transform = 'rotate('+GFFOBJ.exchageslider+'deg)';
-                                                                        GFFOBJ.layoutfeatures.updatelinkoption(gelem('edgeslider').value,'percen');
-                                                                    "
-                                                                >
-                                                                    <i class="fas fa-exchange-alt fa-lg"
-                                                                        style="padding: 0;margin: 0; width: 100%;
-                                                                            color:#fff;
-                                                                        "
-                                                                        ></i>
-                                                                </a>
-
-                                                            </div>                                                        
-                                                        </td>
-                                                        <td>
-                                                            <!--<input id ="edgeslider" type="range" min="0" max="100" value="0"-->
-                                                            <input id ="edgeslider" type="range" min="0" max="10000" value="0"
-                                                                title="Add edges"
-                                                                style="width: 400px; 
-                                                                vertical-align: bottom;
-                                                                margin: 0;
-                                                                padding: 0;
-                                                                /*transform: rotate(270deg);*/
-                                                                "
-                                                                onmouseover="
-                        //                                            setIsVisivelTitleW(true);
-                        //                                            gelem('floatdiv').innerHTML = 'Samples: '+this.value;
-                                                                "
-                                                                onmouseout="
-                        //                                            setIsVisivelTitleW(false);
-                                                                "
-                                                                onchange="
-            //                                                        updatelink(this.value);
-                                                                    GFFOBJ.layoutfeatures.updatelinkoption(this.value,'percen');
-                                                                    numb = (Math.pow(this.value,3.0)/1000000000000.0)*100.0;
-                                                                    numb = numb.toFixed(2);
-
-                                                                    gelem('idperce').innerHTML = numb+'%'
-                                                                "
-                                                            />
-                                                            
-                                                        </td>
-                                                        <td>
-                                                            <div id="idperce">
-                                                                0%
-                                                            </div>                                                        
-                                                        </td>
-                                                    </tr>
-                                                </table>
                                             </div>
                                         </div>
-                                    </div>    
-                                </div>
-                            </td>
-
-                            <td style="width: 5px; vertical-align: middle">
-                                <div style="width: 5px">
-                                </div>
-                            </td>
-
-                            <td style="text-align: center;">
-                                <div style="padding: 3px;">
-                                    <table style="width: 100%;
-                                           color: #fff
-                                    ">
-                                        <tr>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 110px; max-width: 110px;
-                                                     ">PROJECTION</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 110px; max-width: 110px;
-                                                     ">PROXIMITY</div>
-                                            </td>
-                                            <td>
-                                                <div style="font-size: 10px;
-                                                     min-width: 110px; max-width: 110px;
-                                                     ">SELECT ID</div>
-                                            </td>
-                                            <td style="width: 100%">
-
-                                            </td>
-                                        </tr>
-                                    </table>
-                                </div>
-
-                                <div style="background-color: #c5cbdb; color: #000;">
-                                    <div style="padding: 3px">
-                                        <div>
-                                            <table style="width: 100%">
-                                                <tr>
-                                                    <td>
-                                                        <form>
-                                                            <!--<label class="col-md-4">Layout:</label>-->
-                                                            <select id="projection" 
-                                                                    class="form-control form-control-sm col-md-8"
-                                                                    style="max-width: 110px; min-width: 110px;"
-                                                                    onchange="
-                                                                        GFFOBJ.onFeatureSelectionChanged({skipFeatureHighlight: true});
-                                                                    "
-
-                                                            >
-                                                                <!--<option value="simple" selected>Correlation</option>-->
-                                                                <option value="simple">Pair</option>
-                                                                <option value="pca" selected>PCA</option>
-                                                                <option value="tsne">t-SNE</option>
-                                                                <option value="umap">UMAP</option>
-                                                                <option value="mds">MDS</option>
-                                                                <!-- <option value="isomap">ISOMAP</option>
-                                                                <option value="fastmap">FASTMAP</option> -->
-
-                                                                <!-- <option value="lspmds">LSP-MDS</option>
-
-                                                                <option value="lsptsne">LSP-TSNE</option> -->
-
-                                                                <option value="lsptsne">LSP</option>
-
-                                                                <!-- <option value="lspisomap">LSP-ISOMAP</option>
-                                                                <option value="lspfastmap">LSP-FASTMAP</option> -->
-
-                                                                <!--<option value="mst">MST</option>-->
-                                                            </select>
-                                                        </form>
-                                                    </td>
-                                                    <td>
-                                                        <select id="instanceproximity" 
-                                                            class="form-control form-control-sm col-md-8"
-                                                            style="max-width: 110px; min-width: 110px;"
-
-                                                            >
-
-                                                                <option value="Euclidean">Euclidean</option>
-
-                                                                <option value="DCosine">Cosine</option>
-
-                                                                <!-- <option value="lspisomap">LSP-ISOMAP</option>
-                                                                <option value="lspfastmap">LSP-FASTMAP</option> -->
-
-                                                                <!--<option value="mst">MST</option>-->
-                                                        </select>
-                                                    </td>
-                                                    <td>
-                                                        <label for="submodular_size">Further reduce rows</label>
-                                                        <input id="submodular_size" type="number" min="1" step="1"
-                                                            class="form-control form-control-sm" placeholder="Automatic"
-                                                            title="Uploads are sampled automatically. Optionally reduce the working sample further; press Execute to apply.">
-                                                    </td>
-                                                    <td>
-                                                        <select id="idinstanceslabels" 
-                                                            class="form-control form-control-sm col-md-8"
-                                                            style="max-width: 110px; min-width: 110px;"
-                                                            onchange="
-                                                                var txtv = trim(this.value);
-                                                                //console.log('txtv', txtv);
-                                                                if(txtv!=''){
-                                                                    GFFOBJ.makeInstancesLabels(txtv);
-                                                                }
-                                                            "
-                                                        >
-                                                            <option value="">None</option>
-                                                        </select>
-                                                        <!-- 
-                                                        <div
-                                                            class="btn-group" role="group" aria-label="Basic example"
-                                                        >
-                                                            <button id="idselectedfebt" type="button"
-                                                                class="btn btn-primary btn-sm dropdown-toggle"
-                                                                style="max-width: 110px; min-width: 110px;"
-                                                                value="0"
-                                                            >
-                                                                Feature
-                                                            </button>
-                                                        </div>
-                                                        <div id="idselectidcont"></div>
-                                                        -->
-                                                    </td>
-                                                    <td style="width: 100%; text-align: right">
-                                                        <p class="bs-component" style="margin: 0; padding: 0">
-                                                            <a href="#" class="btn btn-success btn-sm"
-                                                                onclick="
-                                                                    GFFOBJ.visInstnaces();
-                                                                "
-                                                                title="Execute instance visualization"
-                                                            >
-                                                                <!--&#9656;-->
-                                                                <i class="fa fa-play fa-lg"
-                                                                    style="padding: 0;margin: 0; width: 100%"
-                                                                ></i>
-                                                            </a>
-                                                        </p>
-                                                    </td>
-                                                </tr>
-                                            </table>
-                                            <div style="height: 2px"></div>
+                                        <div style="height: 30px; padding: 4px 2px; display: flex; align-items: center; gap: 6px; box-sizing: border-box;">
+                                            <div style="flex: 0 0 22px; width: 22px;">
+                                                <a
+                                                    class="btn btn-dark btn-sm"
+                                                    title="Shift"
+                                                    style="width: 100%; padding: 1px;"
+                                                    onclick="
+                                                        if (GFFOBJ.exchageslider==0){
+                                                            GFFOBJ.exchageslider = 180;
+                                                        }
+                                                        else{
+                                                            GFFOBJ.exchageslider = 0;
+                                                        }
+                                                        gelem('edgeslider').style.transform = 'rotate('+GFFOBJ.exchageslider+'deg)';
+                                                        GFFOBJ.layoutfeatures.updatelinkoption(gelem('edgeslider').value,'percen');
+                                                    "
+                                                >
+                                                    <i class="fas fa-exchange-alt" style="padding: 0; margin: 0; width: 100%; color: #fff;"></i>
+                                                </a>
+                                            </div>
+                                            <input id="edgeslider" type="range" min="0" max="10000" value="0"
+                                                title="Add edges"
+                                                style="flex: 1 1 auto; min-width: 0; margin: 0; padding: 0;"
+                                                onchange="
+                                                    GFFOBJ.layoutfeatures.updatelinkoption(this.value,'percen');
+                                                    numb = (Math.pow(this.value,3.0)/1000000000000.0)*100.0;
+                                                    numb = numb.toFixed(2);
+                                                    gelem('idperce').innerHTML = numb+'%';
+                                                "
+                                            />
+                                            <div id="idperce" style="flex: 0 0 42px; width: 42px; text-align: right; font-size: 11px;">0%</div>
                                         </div>
-                                        <div style="
-                                                width: 100%;
-                                                color: #000;
-                                                border: 3px solid #13d102;
-                                                background-color: #fff;
-                                             ">
-                                            <table>
-                                                <tr>
-                                                    <td>
-                                                        <div style="width: 20px; vertical-align: middle;
-                                                             ">
-                                                            <div style="width: 20px">
-                                                                <svg style="width: 20px" id="seq2"></svg>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div id="idlayout2" style="
-                                                        /*
-                                                            min-width: 500px; min-height: 500px;
-                                                            max-width: 500px; max-height: 500px;
-                                                        */
-                                                            position: relative;
-                                                            overflow: hidden;
-                                                            ">
-                                                            <div id="visp"></div>
+                                </div>
+                        </div>
 
-                                                            <div style="
-                                                                display: table;
-                                                                width: 100%;
-                                                                color: #000;
-                                                                font-size: 9px;
-                                                                position: absolute;
-                                                                top: 0;
-                                                            "
-                                                            >
-                                                                <span id="topleft2" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                                <span id="topright2" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                            </div>
+                        <div id="gffPanelRight" class="gff-panel-column">
+                                <div class="gff-toolbar-header">
+                                    <div style="display: flex; align-items: center; gap: 3px; width: 100%; color: #fff;">
+                                        <div style="font-size: 9px; flex: 0 0 76px; width: 76px; overflow: hidden;">PROJECTION</div>
+                                        <div style="font-size: 9px; flex: 0 0 76px; width: 76px; overflow: hidden;">PROXIMITY</div>
+                                        <div style="font-size: 9px; flex: 0 0 68px; width: 68px; overflow: hidden;">MAX ROWS</div>
+                                        <div style="font-size: 9px; flex: 0 0 88px; width: 88px; overflow: hidden;">SELECT ID</div>
+                                        <div style="font-size: 9px; flex: 1 1 auto; text-align: left; overflow: hidden;">POINT FILES</div>
+                                        <div style="font-size: 9px; flex: 0 0 32px; width: 32px; text-align: right;">RUN</div>
+                                    </div>
+                                </div>
 
-                                                            <div style="
-                                                                display: table;
-                                                                width: 100%;
-                                                                color: #000;
-                                                                font-size: 9px;
-                                                                position: absolute;
-                                                                bottom: 0;
-                                                            "
-                                                            >
-                                                                <span id="infleft2" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                                <span id="infright2" style="padding: 2px; font-size: 9px;">
-                                                                    &nbsp;
-                                                                </span>
-                                                            </div>
+                                <div style="background-color: #c5cbdb; color: #000; padding: 3px; box-sizing: border-box;">
+                                        <div class="gff-toolbar-controls">
+                                            <select id="projection"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 76px; width: 76px;"
+                                                onchange="GFFOBJ.onFeatureSelectionChanged({skipFeatureHighlight: true});"
+                                            >
+                                                <option value="simple">Pair</option>
+                                                <option value="pca" selected>PCA</option>
+                                                <option value="tsne">t-SNE</option>
+                                                <option value="umap">UMAP</option>
+                                                <option value="mds">MDS</option>
+                                                <option value="lsptsne">LSP</option>
+                                            </select>
+                                            <select id="instanceproximity"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 76px; width: 76px;"
+                                            >
+                                                <option value="Euclidean">Euclidean</option>
+                                                <option value="DCosine">Cosine</option>
+                                            </select>
+                                            <input id="submodular_size" type="number" min="1" step="1"
+                                                class="form-control form-control-sm" placeholder="Auto"
+                                                style="flex: 0 0 68px; width: 68px;"
+                                                title="Uploads are sampled automatically. Optionally reduce the working sample further; press Execute to apply.">
+                                            <select id="idinstanceslabels"
+                                                class="form-control form-control-sm"
+                                                style="flex: 0 0 88px; width: 88px;"
+                                                onchange="GFFOBJ.makeInstancesLabels(trim(this.value));"
+                                            >
+                                                <option value="">None</option>
+                                            </select>
+                                            <div style="flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 3px; overflow: hidden;">
+                                                <div class="btn-group btn-group-sm" role="group" style="flex: 0 0 auto;">
+                                                    <button type="button" class="btn btn-info btn-sm"
+                                                        onclick="gelem('pointfilesinput').click();"
+                                                        title="Load files associated with projected points (images, audio, text, etc.)"
+                                                    >
+                                                        <i class="fa fa-file-upload"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-secondary btn-sm"
+                                                        onclick="gelem('pointfolderinput').click();"
+                                                        title="Load folder of files associated with projected points"
+                                                    >
+                                                        <i class="fa fa-folder-open"></i>
+                                                    </button>
+                                                    <button type="button" id="pointfilesclearbtn" class="btn btn-outline-danger btn-sm"
+                                                        onclick="GFFOBJ.clearPointFiles();"
+                                                        title="Clear loaded point files"
+                                                        style="display: none;"
+                                                    >
+                                                        <i class="fa fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                <span id="pointfilesstatus" style="font-size: 9px; color: #1e293b; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+                                                <input type="file" id="pointfilesinput" multiple style="display: none;"
+                                                    onchange="GFFOBJ.loadPointFiles(this.files); this.value='';"
+                                                >
+                                                <input type="file" id="pointfolderinput" webkitdirectory directory multiple style="display: none;"
+                                                    onchange="GFFOBJ.loadPointFiles(this.files); this.value='';"
+                                                >
+                                            </div>
+                                            <a href="#" class="btn btn-success btn-sm"
+                                                style="flex: 0 0 auto;"
+                                                onclick="event.preventDefault(); GFFOBJ.visInstnaces();"
+                                                title="Execute instance visualization"
+                                            >
+                                                <i class="fa fa-play" style="padding: 0; margin: 0;"></i>
+                                            </a>
+                                        </div>
+
+                                        <div class="gff-canvas-box gff-canvas-box-right">
+                                            <div class="gff-canvas-strip-left">
+                                                <svg style="width: 20px" id="seq2"></svg>
+                                            </div>
+                                            <div class="gff-canvas-center">
+                                                <div id="idlayout2" style="position: relative; overflow: hidden;">
+                                                    <div id="visp"></div>
+
+                                                    <div class="gff-overlay-bar" style="top: 0;">
+                                                        <span id="topleft2">&nbsp;</span>
+                                                        <span id="topright2">&nbsp;</span>
+                                                    </div>
+
+                                                    <div class="gff-overlay-bar" style="bottom: 0;">
+                                                        <span id="infleft2">&nbsp;</span>
+                                                        <span id="infright2">&nbsp;</span>
+                                                    </div>
 
                                                             <div id="featselectinstance" 
                                                                 style="
@@ -1457,13 +1141,12 @@
                                                                         margin-right: 24px;
                                                                         cursor: pointer;
                                                                     "
-                                                                    onclick="
-                                                                        gelem('featselectfeature').style.display = 'none';
-                                                                    "
-                                                                    title="Close"
+                                                                    title="Export as svg image"
                                                                 >
                                                                     <a href="#" class="btn btn-warning btn-sm"
                                                                         onclick="
+                                                                            event.preventDefault();
+                                                                            event.stopPropagation();
                                                                             GFFOBJ.save_as_svg('#featselectinstancecontent','instance');
                                                                         "
                                                                         title="Export as svg image"
@@ -1480,19 +1163,37 @@
                                                                     
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    </td>
-                                                    <td style="vertical-align: top;
-                                                            max-width: 24px;
-                                                            min-width: 24px;
-                                                            width: 24px;
-                                                            vertical-align: middle;
-                                                        "
-                                                    >
-                                                        <table id="idlayout2bar" style="width: 22px;">
+                                                </div>
+                                            </div>
+                                            <div class="gff-canvas-strip-right">
+                                                <table id="idlayout2bar" style="width: 22px;">
                                                             <tr>
                                                                 <td style="vertical-align: top;">
 
+                                                                    <div style="height: 3px"></div>
+                                                                    <a href="#" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.zoomInstances('in');"
+                                                                        title="Zoom in (constant step)"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-search-plus" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
+                                                                    <div style="height: 2px"></div>
+                                                                    <a href="#" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.zoomInstances('out');"
+                                                                        title="Zoom out (constant step)"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-search-minus" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
+                                                                    <div style="height: 2px"></div>
+                                                                    <a href="#" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.zoomInstances('reset');"
+                                                                        title="Reset zoom"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-compress-arrows-alt" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
                                                                     <div style="height: 3px"></div>
                                                                     
                                                                     <a href="#" class="btn btn-danger btn-sm"
@@ -1722,18 +1423,45 @@
                                                                 </td>
                                                             </tr>
                                                         </table>
-                                                    </td>
-                                                </tr>
-                                            </table>
+                                            </div>
                                         </div>
-                                        <div style="vertical-align: middle; height: 30px">
-
-                                        </div>
-                                    </div>
+                                        <div style="height: 30px; box-sizing: border-box;"></div>
                                 </div>
-                            </td>
-                        </tr>
-                    </table>
+                        </div>
+                    </div>
+
+                    <div id="gffBottomDock">
+                        <div id="xaiselectedsummary"
+                            style="
+                                width: 100%;
+                                max-height: 175px;
+                                overflow: auto;
+                                color: #172033;
+                                background-color: #eef4ff;
+                                border: 1px solid #b8cae6;
+                                font-size: 10px;
+                                line-height: 1.25;
+                                padding: 5px 8px;
+                                margin-bottom: 6px;
+                                display: none;
+                                box-sizing: border-box;
+                            "
+                        ></div>
+                        <div id="pointfilespanel"
+                            style="
+                                width: 100%;
+                                max-height: 240px;
+                                overflow: auto;
+                                color: #172033;
+                                background-color: #f8fafc;
+                                border: 1px solid #cbd5e1;
+                                font-size: 11px;
+                                padding: 6px 8px;
+                                display: none;
+                                box-sizing: border-box;
+                            "
+                        ></div>
+                    </div>
                 </div>
             </td>
         </tr>

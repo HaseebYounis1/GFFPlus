@@ -175,17 +175,16 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
     self.svgRoot = d3.select(idview).append("svg")
         .attr("width", self.width)
         .attr("height", self.height);
-    self.svg = self.svgRoot.append("g")
+    self.zoomLayer = self.svgRoot.append("g");
+    self.svg = self.zoomLayer.append("g")
         .attr("transform", "translate(" + self.radius + "," + self.radius + ")");
-    self.zoom = d3.zoom()
-        .scaleExtent([0.5, 12])
-        .on("zoom", function () {
-            self.svg.attr(
-                "transform",
-                "translate(" + self.radius + "," + self.radius + ") " + d3.event.transform
-            );
-        });
-    self.svgRoot.call(self.zoom);
+    self.zoomController = createConstantZoom(self.svgRoot, function (t) {
+        self.zoomLayer.attr("transform", t);
+    }, { minScale: 0.25, maxScale: 20 });
+    self.zoom = self.zoomController.behavior;
+    self.zoomIn = self.zoomController.zoomIn;
+    self.zoomOut = self.zoomController.zoomOut;
+    self.resetZoom = self.zoomController.resetZoom;
 
     self.cluster = d3.cluster()
         .size([360, (self.width / 2) - 24]);
@@ -314,14 +313,18 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
         }
 
         self.node.selectAll("circle")
+            .attr("r", function (d) {
+                var base = d.data.node.category == 1 ? 2 : self.r + (self.nodeSizeMetric(d.data.node) * 2);
+                return selected[d.data.node.name] ? base + 2.2 : base;
+            })
             .style("opacity", function (d) {
-                return ids.length > 0 && d.data.node.category == 0 && !selected[d.data.node.name] ? 0.35 : 1.0;
+                return ids.length > 0 && d.data.node.category == 0 && !selected[d.data.node.name] ? 0.22 : 1.0;
             })
             .style("stroke-width", function (d) {
-                return selected[d.data.node.name] ? 2.25 : 0.75;
+                return selected[d.data.node.name] ? 3.0 : 0.75;
             })
             .style("stroke", function (d) {
-                return selected[d.data.node.name] ? d3.color(this.style.fill).darker() : "#ffffff";
+                return selected[d.data.node.name] ? "#d50000" : "#ffffff";
             });
 
         gelem("topleft1").innerHTML = "TOTAL: " + self.graph.nodes.filter(function (d) {

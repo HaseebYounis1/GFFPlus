@@ -52,8 +52,8 @@ class UMAPP(Projection):
                     n_neighbors=n_neighbors,
                     n_epochs=120,
                     low_memory=True,
-                    random_state=None,
-                    n_jobs=-1,
+                    random_state=7,
+                    n_jobs=1,
                 ).fit_transform(X)
                 return X2.tolist();
             except Exception as exc:

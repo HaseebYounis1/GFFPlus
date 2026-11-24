@@ -92,6 +92,10 @@ function UnselectedFeatures(btnid, contid, selfgff) {
         container.appendChild(divs);
 
         for (var item of self.backsearch){
+            // Exclude the current target column (e.g. Category) from the feature select dropdown
+            if (String(item.id) === String(idt)) {
+                continue;
+            }
             cktxt = false;
             if (item.value==1){
                 cktxt=true;
@@ -173,9 +177,9 @@ function UnselectedFeatures(btnid, contid, selfgff) {
     };
 
     this.setChecked = function(i, value){
-        //console.log("i, value", i, value);
-        self.unselectedfeatures[i].value = value;
-        //selfgff.featureCheck(self.unselectedfeatures[i].id, value);
+        if (self.unselectedfeatures[i] !== undefined) {
+            self.unselectedfeatures[i].value = value;
+        }
     };
     
     this.load = function(){

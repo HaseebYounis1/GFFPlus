@@ -810,7 +810,7 @@ class Query(BaseHandler):
                             z[zkey] = it
                             it += 1
 
-                        si = Metrics.compute_silhoute(X,y,z);
+                        si = round(float(Metrics.compute_silhoute(X,y,z)), 4);
                         config["silhouette"] = si;
                         DBX.update(DBS.DBGFF, "data", {'_id':idin}, {'configinstance':config})
 
@@ -1056,38 +1056,46 @@ class Query(BaseHandler):
             fnamesindex ={ str(fnames[i]):i for i in range(len(fnames))}
 
             layoutfeature = DBFile.openFile(Settings.DATA_PATH+str(idin)+"/feature.obj")
-            nodes = layoutfeature["graph"]["nodes"]
+            raw_nodes = layoutfeature.get("graph", {}).get("nodes", [])
 
             X = DataMatrix(filename, max_rows=5000)
             columns = X.columns()
             colsindexes = X.columnsindexes()
-            
+
+            # Keep only real feature nodes (exclude NJ auxiliary category==1 nodes)
+            nodes = [
+                nod for nod in raw_nodes
+                if nod.get("category", 0) == 0
+                and isinstance(nod.get("label"), int)
+                and 0 <= nod["label"] < len(columns)
+            ]
+
             XT = X.transpose()
             del X
 
-            export = "DY\n" 
-            export += str(len(nodes))+"\n" 
-            export += str(XT.cols())+"\n" 
-            nfecol = ["fe"+str(i) for i in range(XT.cols()) ]
-            export += ";".join(nfecol)+"\n" 
+            export = "DY\n"
+            export += str(len(nodes)) + "\n"
+            export += str(XT.cols()) + "\n"
+            nfecol = ["fe" + str(i) for i in range(XT.cols())]
+            export += ";".join(nfecol) + "\n"
             for nod in nodes:
-                #i = fnamesindex[nod["label"]]
                 i = nod["label"]
-                row = [str(columns[i])]
+                col_label = str(columns[i]).replace(";", "_").replace("\n", " ").strip()
+                row = [col_label]
                 for j in range(XT.cols()):
-                    row.append(str(XT.getValue(i,j)))
+                    row.append(str(XT.getValue(i, j)))
 
                 export += ";".join(row)
-                export += ";"+str(0.0)+"\n"
-                
+                export += ";0.0\n"
+
             del XT
             del fnamesindex
             del layoutfeature
             del nodes
-            #target_id = X.columnindex(target)
 
-        selft.set_header('Content-Type', 'text/plain')
-        selft.set_header("Content-Disposition", "attachment; filename=%s" % name+".data")
+        safe_name = "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in str(name or "dataset")).strip("_") or "dataset"
+        selft.set_header('Content-Type', 'text/plain; charset=utf-8')
+        selft.set_header("Content-Disposition", 'attachment; filename="%s.data"' % safe_name)
 
         return export;
     

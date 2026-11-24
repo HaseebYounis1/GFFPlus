@@ -26,12 +26,13 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
         .attr("width", self.width)
         .attr("height", self.height);
     self.viewport = self.svg.append("g");
-    self.zoom = d3.zoom()
-        .scaleExtent([0.5, 12])
-        .on("zoom", function () {
-            self.viewport.attr("transform", d3.event.transform);
-        });
-    self.svg.call(self.zoom);
+    self.zoomController = createConstantZoom(self.svg, function (t) {
+        self.viewport.attr("transform", t);
+    }, { minScale: 0.25, maxScale: 20 });
+    self.zoom = self.zoomController.behavior;
+    self.zoomIn = self.zoomController.zoomIn;
+    self.zoomOut = self.zoomController.zoomOut;
+    self.resetZoom = self.zoomController.resetZoom;
 
     self.pickCommunityEdges = function () {
         var featureEdges = self.graph.links.filter(function (edge) {
@@ -183,13 +184,18 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
         }
 
         self.node.selectAll("circle")
+            .style("opacity", function (d) {
+                if (ids.length === 0) return 0.92;
+                var hit = d.members.some(function (id) { return selected[id]; });
+                return hit ? 1.0 : 0.28;
+            })
             .style("stroke", function (d) {
                 var hit = d.members.some(function (id) { return selected[id]; });
-                return hit ? "#ffffff" : "#293244";
+                return hit ? "#d50000" : "#293244";
             })
             .style("stroke-width", function (d) {
                 var hit = d.members.some(function (id) { return selected[id]; });
-                return hit ? 2.5 : 1;
+                return hit ? 3.5 : 1;
             });
 
         gelem("topleft1").innerHTML = "COMMUNITIES: " + self.communities.length;
@@ -222,8 +228,9 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
         self.viewport.append("text")
             .attr("x", 12)
             .attr("y", 18)
-            .style("fill", "#ffffff")
+            .style("fill", "#1f2937")
             .style("font-size", "12px")
+            .style("font-weight", "600")
             .text("Feature communities from strong graph relationships");
 
         self.link = self.viewport.append("g")
