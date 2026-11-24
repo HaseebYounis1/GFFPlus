@@ -180,6 +180,27 @@ class TestUIAndExportFixes(unittest.TestCase):
         self.assertEqual(r1["importance"], r2["importance"])
         self.assertEqual(r1["permutation"]["values"], r2["permutation"]["values"])
 
+    def test_point_media_zip_upload_and_listing(self):
+        import zipfile
+        from vx.gff.Upload import save_point_media
+
+        zip_path = Path(self.tmpdir.name) / "test_media.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("sample_0.png", b"\x89PNG\r\n\x1a\nfake")
+            zf.writestr("sub/sample_1.wav", b"RIFF0000WAVEfmt ")
+            zf.writestr("../evil.exe", b"blocked")
+
+        res = save_point_media(str(zip_path), "test_media.zip", self.ds_id)
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(res["saved"], 2)
+        self.assertEqual(res["files"], ["sample_0.png", "sample_1.wav"])
+
+        listed = Query.listPointMedia(_DummyApp({"file": self.ds_id}))
+        self.assertEqual(listed["status"], "ok")
+        names = [item["name"] for item in listed["files"]]
+        self.assertEqual(names, ["sample_0.png", "sample_1.wav"])
+        self.assertTrue(listed["files"][0]["url"].endswith("/media/sample_0.png"))
+
 
 if __name__ == "__main__":
     unittest.main()

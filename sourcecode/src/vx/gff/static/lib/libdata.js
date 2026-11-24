@@ -453,7 +453,7 @@ function GraphFromFeatures() {
 
     this.clearPointFiles = function () {
         for (var i = 0; i < self.pointFileList.length; ++i) {
-            if (self.pointFileList[i] && self.pointFileList[i].url) {
+            if (self.pointFileList[i] && self.pointFileList[i].isObjectUrl && self.pointFileList[i].url) {
                 try { URL.revokeObjectURL(self.pointFileList[i].url); } catch (e) {}
             }
         }
@@ -471,6 +471,30 @@ function GraphFromFeatures() {
         }
     };
 
+    this._classifyMediaEntry = function (name, url, opts) {
+        opts = opts || {};
+        var mime = String(opts.type || "").toLowerCase();
+        var lower = String(name || "").toLowerCase();
+        var stem = String(name || "").replace(/\.[^/.]+$/, "");
+        return {
+            file: opts.file || null,
+            name: name,
+            stem: stem,
+            lowerName: lower,
+            lowerStem: stem.toLowerCase(),
+            url: url,
+            isObjectUrl: !!opts.isObjectUrl,
+            type: mime,
+            size: opts.size || 0,
+            isImage: mime.indexOf("image/") === 0 || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower),
+            isAudio: mime.indexOf("audio/") === 0 || /\.(wav|mp3|ogg|flac|m4a)$/i.test(lower),
+            isVideo: mime.indexOf("video/") === 0 || /\.(mp4|webm|ogv|mov)$/i.test(lower),
+            isPdf: mime === "application/pdf" || /\.pdf$/i.test(lower),
+            isText: mime.indexOf("text/") === 0 || /\.(txt|csv|json|md|xml|log|yaml|yml)$/i.test(lower),
+            textPreview: null
+        };
+    };
+
     this.loadPointFiles = function (fileList) {
         if (!fileList || fileList.length === 0) {
             return;
@@ -480,34 +504,316 @@ function GraphFromFeatures() {
         for (var i = 0; i < fileList.length; ++i) {
             var f = fileList[i];
             if (!f || !f.name) continue;
-            var mime = String(f.type || "").toLowerCase();
-            var lower = f.name.toLowerCase();
-            var isImage = mime.indexOf("image/") === 0 || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(lower);
-            var isAudio = mime.indexOf("audio/") === 0 || /\.(wav|mp3|ogg|flac|m4a)$/i.test(lower);
-            var isVideo = mime.indexOf("video/") === 0 || /\.(mp4|webm|ogv)$/i.test(lower);
-            var isText = mime.indexOf("text/") === 0 || /\.(txt|csv|json|md|xml|log|yaml|yml)$/i.test(lower);
-            var stem = f.name.replace(/\.[^/.]+$/, "");
-            entries.push({
+            entries.push(self._classifyMediaEntry(f.name, URL.createObjectURL(f), {
                 file: f,
-                name: f.name,
-                stem: stem,
-                lowerName: lower,
-                lowerStem: stem.toLowerCase(),
-                url: URL.createObjectURL(f),
-                type: mime,
-                size: f.size || 0,
-                isImage: isImage,
-                isAudio: isAudio,
-                isVideo: isVideo,
-                isText: isText,
-                textPreview: null
-            });
+                type: f.type,
+                size: f.size,
+                isObjectUrl: true
+            }));
         }
         entries.sort(function (a, b) {
             return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
         });
         self.pointFileList = entries;
         self.rebindPointFilesToCurrentPoints();
+    };
+
+    this.loadServerPointMedia = function () {
+        if (!self.datafileselected) return;
+        var ob = new ServiceData("loading dataset point media");
+        ob.in.argms["type"] = 29;
+        ob.in.argms["file"] = self.datafileselected;
+        ob.event = function () {
+            if (!this.ou || this.ou.status !== "ok" || !Array.isArray(this.ou.files) || this.ou.files.length === 0) {
+                return;
+            }
+            self.clearPointFiles();
+            var entries = this.ou.files.map(function (item) {
+                return self._classifyMediaEntry(item.name, item.url, {
+                    size: item.size || 0,
+                    isObjectUrl: false
+                });
+            });
+            entries.sort(function (a, b) {
+                return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+            });
+            self.pointFileList = entries;
+            self.rebindPointFilesToCurrentPoints();
+        };
+        ob.start();
+    };
+
+    this.uploadPointMediaZip = function (file) {
+        if (!file || !self.datafileselected) {
+            self.mw.alert("Media Upload", "Open a dataset before uploading point media.");
+            return;
+        }
+        MOPRO.show("Uploading point media files");
+        fetch("./upload_media", {
+            method: "POST",
+            credentials: "same-origin",
+            body: file,
+            headers: {
+                "Content-Type": "application/octet-stream",
+                "X-Dataset-Id": self.datafileselected,
+                "X-Filename": encodeURIComponent(file.name),
+                "X-XSRFToken": document.querySelector('meta[name="xsrf-token"]').content
+            }
+        }).then(function (response) {
+            if (!response.ok) throw new Error("Media upload failed: " + response.status + " " + response.statusText);
+            return response.json();
+        }).then(function (result) {
+            self.loadServerPointMedia();
+            self.mw.alert("Media Loaded", "Saved " + (result.saved || 0) + " media file(s) to this dataset.");
+        }).catch(function (err) {
+            self.mw.alert("Media Upload Error", err.message);
+        }).finally(function () {
+            MOPRO.hide();
+        });
+    };
+
+    this.renderAudioWaveform = function (canvasId, url) {
+        var canvas = gelem(canvasId);
+        if (!canvas || !url || !(window.AudioContext || window.webkitAudioContext)) return;
+        fetch(url, { credentials: "same-origin" })
+            .then(function (res) { return res.arrayBuffer(); })
+            .then(function (buf) {
+                var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                var ctx = new AudioCtx();
+                return ctx.decodeAudioData(buf).then(function (audioBuffer) {
+                    try { ctx.close(); } catch (e) {}
+                    return audioBuffer;
+                });
+            })
+            .then(function (audioBuffer) {
+                var el = gelem(canvasId);
+                if (!el) return;
+                var c = el.getContext("2d");
+                var w = el.width;
+                var h = el.height;
+                c.fillStyle = "#0f172a";
+                c.fillRect(0, 0, w, h);
+                var data = audioBuffer.getChannelData(0);
+                var step = Math.max(1, Math.floor(data.length / w));
+                var mid = h / 2;
+                c.strokeStyle = "#38bdf8";
+                c.lineWidth = 1.2;
+                c.beginPath();
+                for (var x = 0; x < w; ++x) {
+                    var minV = 1.0, maxV = -1.0;
+                    var start = x * step;
+                    for (var j = 0; j < step && (start + j) < data.length; ++j) {
+                        var v = data[start + j];
+                        if (v < minV) minV = v;
+                        if (v > maxV) maxV = v;
+                    }
+                    c.moveTo(x, mid + minV * (mid - 4));
+                    c.lineTo(x, mid + maxV * (mid - 4));
+                }
+                c.stroke();
+            })
+            .catch(function () {});
+    };
+
+    this.closePointDataModal = function () {
+        var modal = gelem("pointdatamodal");
+        if (!modal) return;
+        var mediaEls = modal.querySelectorAll("audio, video");
+        for (var i = 0; i < mediaEls.length; ++i) {
+            try { mediaEls[i].pause(); } catch (e) {}
+        }
+        modal.classList.remove("open");
+    };
+
+    this.stepPointDataModal = function (delta) {
+        var points = (self.datagff && self.datagff.layoutinstance && Array.isArray(self.datagff.layoutinstance.points))
+            ? self.datagff.layoutinstance.points : [];
+        if (points.length === 0) return;
+        var idx = 0;
+        for (var i = 0; i < points.length; ++i) {
+            if (String(points[i].id) === String(self.activePointId)) {
+                idx = i;
+                break;
+            }
+        }
+        var nextIdx = (idx + delta + points.length) % points.length;
+        self.openPointDataModal(points[nextIdx].id);
+    };
+
+    this.openPointDataModal = function (pointId) {
+        self.activePointId = pointId;
+        if (self.layoutinstance && self.layoutinstance.focusPoint) {
+            self.layoutinstance.focusPoint(pointId);
+        }
+        var modal = gelem("pointdatamodal");
+        var stage = gelem("pdmMediaStage");
+        var sidebar = gelem("pdmSidebar");
+        var titleEl = gelem("pdmTitle");
+        var openLink = gelem("pdmOpenLink");
+        if (!modal || !stage || !sidebar) return;
+
+        var points = (self.datagff && self.datagff.layoutinstance && Array.isArray(self.datagff.layoutinstance.points))
+            ? self.datagff.layoutinstance.points : [];
+        var targetNames = (self.datagff && self.datagff.layoutinstance && self.datagff.layoutinstance.tartegsnames)
+            ? self.datagff.layoutinstance.tartegsnames : {};
+        var pt = null;
+        for (var i = 0; i < points.length; ++i) {
+            if (String(points[i].id) === String(pointId)) {
+                pt = points[i];
+                break;
+            }
+        }
+
+        var pf = self.getPointFile(pointId);
+        if (!pf) {
+            var rawLbl = String(self.getInstanceLabel(pointId) || "").trim();
+            if (/^(https?:\/\/|data:image\/|data:audio\/|data:video\/)/i.test(rawLbl)) {
+                pf = self._classifyMediaEntry(rawLbl.split("/").pop() || ("point_" + pointId), rawLbl, { isObjectUrl: false });
+            }
+        }
+
+        var displayName = pf ? pf.name : self.getExportInstanceName(pointId);
+        if (titleEl) {
+            titleEl.textContent = displayName + "  (Point #" + pointId + ")";
+        }
+        if (openLink) {
+            if (pf && pf.url) {
+                openLink.href = pf.url;
+                openLink.style.display = "inline-block";
+            } else {
+                openLink.style.display = "none";
+            }
+        }
+
+        var stageHtml = "";
+        if (pf && pf.url) {
+            if (pf.isImage) {
+                stageHtml = "<img src='" + pf.url + "' alt='" + self.escapeHTML(pf.name) + "' onclick='this.classList.toggle(\"zoomed\");' title='Click to toggle zoom'>" +
+                    "<div style='margin-top:6px; font-size:10px; color:#94a3b8;'>" + self.escapeHTML(pf.name) + " (click image to zoom)</div>";
+            } else if (pf.isAudio) {
+                stageHtml = "<canvas id='pdmWaveformCanvas' width='420' height='120' style='width:100%; max-width:440px; height:120px; border:1px solid #334155; border-radius:4px; margin-bottom:10px;'></canvas>" +
+                    "<audio controls autoplay src='" + pf.url + "' style='width:100%; max-width:440px;'></audio>" +
+                    "<div style='margin-top:6px; font-size:11px; color:#cbd5e1;'>" + self.escapeHTML(pf.name) + "</div>";
+            } else if (pf.isVideo) {
+                stageHtml = "<video controls autoplay src='" + pf.url + "' style='max-width:100%; max-height:60vh; border-radius:4px;'></video>" +
+                    "<div style='margin-top:6px; font-size:11px; color:#cbd5e1;'>" + self.escapeHTML(pf.name) + "</div>";
+            } else if (pf.isPdf) {
+                stageHtml = "<iframe src='" + pf.url + "' style='width:100%; height:58vh; border:none; background:#fff; border-radius:3px;'></iframe>";
+            } else if (pf.isText) {
+                stageHtml = "<pre id='pdmTextContent' style='width:100%; max-height:58vh; overflow:auto; text-align:left; background:#1e293b; color:#e2e8f0; padding:10px; border-radius:4px; font-size:11px; margin:0;'>Loading text file...</pre>";
+            } else {
+                stageHtml = "<div style='text-align:center; padding:24px;'>" +
+                    "<i class='fa fa-file fa-4x' style='color:#64748b; margin-bottom:10px;'></i>" +
+                    "<div style='font-size:13px; font-weight:600;'>" + self.escapeHTML(pf.name) + "</div>" +
+                    "<a href='" + pf.url + "' target='_blank' rel='noopener' class='btn btn-info btn-sm' style='margin-top:10px;'>Open / Download File</a></div>";
+            }
+        } else {
+            stageHtml = "<div style='text-align:center; padding:24px; max-width:340px;'>" +
+                "<i class='fa fa-photo-video fa-3x' style='color:#64748b; margin-bottom:10px;'></i>" +
+                "<div style='font-size:13px; font-weight:600; margin-bottom:6px;'>No media file attached to Point #" + self.escapeHTML(pointId) + "</div>" +
+                "<div style='font-size:11px; color:#94a3b8; margin-bottom:12px;'>Load a local folder/files or upload a media ZIP (images, audio, video, PDF, text) to inspect data directly on points.</div>" +
+                "<div style='display:flex; gap:6px; justify-content:center; flex-wrap:wrap;'>" +
+                    "<button type='button' class='btn btn-info btn-sm' onclick='gelem(\"pointfilesinput\").click();'><i class='fa fa-file-upload'></i> Files</button>" +
+                    "<button type='button' class='btn btn-secondary btn-sm' onclick='gelem(\"pointfolderinput\").click();'><i class='fa fa-folder-open'></i> Folder</button>" +
+                    "<button type='button' class='btn btn-warning btn-sm' onclick='gelem(\"pointmediazipinput\").click();'><i class='fa fa-file-archive'></i> Upload ZIP</button>" +
+                "</div></div>";
+        }
+        stage.innerHTML = stageHtml;
+
+        var sideHtml = "";
+        var clsText = pt ? (targetNames[pt.t] !== undefined ? targetNames[pt.t] : pt.t) : "n/a";
+        var fidText = (pt && pt.fidelity !== undefined) ? (Math.round(parseFloat(pt.fidelity) * 100) + "%") : "n/a";
+        sideHtml += "<div class='pdm-section'><h6>Point Metadata</h6>" +
+            "<div><b>Point ID:</b> " + self.escapeHTML(pointId) + "</div>" +
+            "<div><b>File / Label:</b> " + self.escapeHTML(displayName) + "</div>" +
+            "<div><b>Class / Target:</b> " + self.escapeHTML(clsText) + "</div>" +
+            (pt ? ("<div><b>2D Projection:</b> (" + Number(pt.x).toFixed(4) + ", " + Number(pt.y).toFixed(4) + ")</div>") : "") +
+            "<div><b>k-NN Fidelity:</b> " + self.escapeHTML(fidText) + "</div>" +
+            "</div>";
+
+        if (pt && points.length > 1) {
+            var neighbors = [];
+            for (var n = 0; n < points.length; ++n) {
+                var other = points[n];
+                if (String(other.id) === String(pointId)) continue;
+                var d2 = Math.hypot(other.x - pt.x, other.y - pt.y);
+                neighbors.push({ pt: other, dist: d2 });
+            }
+            neighbors.sort(function (a, b) { return a.dist - b.dist; });
+            neighbors = neighbors.slice(0, 5);
+            sideHtml += "<div class='pdm-section'><h6>Nearest Projected Neighbors</h6>";
+            for (var k = 0; k < neighbors.length; ++k) {
+                var nb = neighbors[k].pt;
+                var nbName = self.getInstanceLabel(nb.id);
+                var nbCls = targetNames[nb.t] !== undefined ? targetNames[nb.t] : nb.t;
+                sideHtml += "<div class='pdm-neighbor-row' onclick='GFFOBJ.openPointDataModal(" + JSON.stringify(nb.id) + ");'>" +
+                    "<span style='overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;' title='" + self.escapeHTML(nbName) + "'>" + self.escapeHTML(nbName) + "</span>" +
+                    "<span style='color:#475569; font-size:10px;'>" + self.escapeHTML(nbCls) + " · d=" + neighbors[k].dist.toFixed(2) + "</span>" +
+                    "</div>";
+            }
+            sideHtml += "</div>";
+        }
+
+        var featureRow = null;
+        if (Array.isArray(self.dataload) && self.dataload.length > 0) {
+            if (Array.isArray(self.dataloadids)) {
+                var pos = self.dataloadids.indexOf(parseInt(pointId, 10));
+                if (pos >= 0 && self.dataload[pos]) {
+                    featureRow = self.dataload[pos];
+                }
+            }
+            if (!featureRow && self.dataload[parseInt(pointId, 10)]) {
+                featureRow = self.dataload[parseInt(pointId, 10)];
+            }
+        }
+        if (featureRow) {
+            var selectedIds = self.getfeatureselected();
+            var namesToShow = selectedIds.length > 0
+                ? selectedIds.slice(0, 8).map(function (fid) { return self.datagff.fenames[fid]; }).filter(Boolean)
+                : Object.keys(featureRow).slice(0, 8);
+            sideHtml += "<div class='pdm-section'><h6>Feature Values (Active / Sample)</h6><table style='width:100%; font-size:10px;'>";
+            for (var fi = 0; fi < namesToShow.length; ++fi) {
+                var colName = namesToShow[fi];
+                if (featureRow[colName] === undefined) continue;
+                sideHtml += "<tr><td style='color:#334155; padding:1px 4px 1px 0;'>" + self.escapeHTML(colName) + "</td>" +
+                    "<td style='text-align:right; font-weight:600;'>" + self.escapeHTML(featureRow[colName]) + "</td></tr>";
+            }
+            sideHtml += "</table></div>";
+        }
+
+        sidebar.innerHTML = sideHtml;
+        modal.classList.add("open");
+
+        if (pf && pf.isAudio && pf.url) {
+            self.renderAudioWaveform("pdmWaveformCanvas", pf.url);
+        }
+        if (pf && pf.isText) {
+            if (pf.textPreview !== null) {
+                var pre = gelem("pdmTextContent");
+                if (pre) pre.textContent = pf.textPreview;
+            } else if (pf.file) {
+                var reader = new FileReader();
+                reader.onload = function (ev) {
+                    pf.textPreview = String(ev.target.result || "").slice(0, 8000);
+                    var el = gelem("pdmTextContent");
+                    if (el) el.textContent = pf.textPreview;
+                };
+                reader.readAsText(pf.file.slice(0, 16384));
+            } else if (pf.url) {
+                fetch(pf.url, { credentials: "same-origin" })
+                    .then(function (r) { return r.text(); })
+                    .then(function (txt) {
+                        pf.textPreview = txt.slice(0, 8000);
+                        var el = gelem("pdmTextContent");
+                        if (el) el.textContent = pf.textPreview;
+                    }).catch(function () {});
+            }
+        }
+        self.renderPointFilesPanel(
+            (self.layoutinstance && self.layoutinstance.selected && self.layoutinstance.selected.length > 0)
+                ? self.layoutinstance.selected
+                : [pointId]
+        );
     };
 
     this.rebindPointFilesToCurrentPoints = function () {
@@ -665,7 +971,7 @@ function GraphFromFeatures() {
             var fname = pf ? pf.name : self.getInstanceLabel(pid);
             var cls = pt ? (targetNames[pt.t] !== undefined ? targetNames[pt.t] : pt.t) : "";
             var activeCls = (String(pid) === String(self.activePointId)) ? " active" : "";
-            html += "<div class='point-file-card" + activeCls + "' onclick='GFFOBJ.showPointFileDetails(" + JSON.stringify(pid) + ");' title='" + self.escapeHTML(fname) + "'>";
+            html += "<div class='point-file-card" + activeCls + "' onclick='GFFOBJ.openPointDataModal(" + JSON.stringify(pid) + ");' title='" + self.escapeHTML(fname) + "'>";
             if (pf && pf.isImage) {
                 html += "<img class='point-file-thumb' src='" + pf.url + "' alt='" + self.escapeHTML(fname) + "'>";
             } else {
@@ -2131,6 +2437,7 @@ function GraphFromFeatures() {
         self.shifflayoutcontrols('mainlayout');
 
         self.dequeLoadDataset(self.datafileselected);
+        self.loadServerPointMedia();
 
 
     };
@@ -2832,6 +3139,9 @@ function GraphFromFeatures() {
         
 
         document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                self.closePointDataModal();
+            }
             self.setkey(event);
         });
         document.addEventListener('keyup', (event) => {

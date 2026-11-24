@@ -10,13 +10,59 @@ import zipfile
 
 from tornado.web import HTTPError, stream_request_body
 from vx.gff.BaseHandler import BaseHandler
-from vx.gff.Security import current_account, dataset_path
+from vx.gff.Security import current_account, authorize_dataset, dataset_path
 from vx.gff.Settings import Settings
 from vx.gff.Ingestion import ingest_csv
 from vx.gff.Jobs import submit
 from vx.com.py.database.MongoDB import MongoDB
 
 MAX_UPLOAD_BYTES = 10 * 1024**3
+MAX_MEDIA_UPLOAD_BYTES = 2 * 1024**3
+ALLOWED_MEDIA_EXTENSIONS = {
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
+    ".wav", ".mp3", ".ogg", ".flac", ".m4a",
+    ".mp4", ".webm", ".ogv", ".mov",
+    ".pdf", ".txt", ".csv", ".json", ".md", ".xml", ".log", ".yaml", ".yml",
+}
+
+
+def save_point_media(path, filename, dataset_id):
+    """Save uploaded media file(s) or a media ZIP archive into dataset/media/."""
+    directory = dataset_path(dataset_id)
+    media_dir = directory / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    saved = []
+    try:
+        if filename.lower().endswith(".zip"):
+            with zipfile.ZipFile(path) as archive:
+                for entry in archive.infolist():
+                    if entry.is_dir():
+                        continue
+                    base_name = Path(entry.filename).name
+                    if not base_name or base_name.startswith(".") or base_name.startswith("__MACOSX"):
+                        continue
+                    ext = Path(base_name).suffix.lower()
+                    if ext not in ALLOWED_MEDIA_EXTENSIONS:
+                        continue
+                    dest = (media_dir / base_name).resolve()
+                    if dest.parent != media_dir.resolve():
+                        continue
+                    with archive.open(entry) as src, dest.open("wb") as out:
+                        shutil.copyfileobj(src, out, length=1024 * 1024)
+                    saved.append(base_name)
+        else:
+            base_name = Path(filename).name
+            ext = Path(base_name).suffix.lower()
+            if ext not in ALLOWED_MEDIA_EXTENSIONS:
+                raise ValueError("Unsupported media file type: {}".format(ext or "(none)"))
+            dest = (media_dir / base_name).resolve()
+            if dest.parent != media_dir.resolve():
+                raise ValueError("Invalid media filename")
+            shutil.copyfile(path, dest)
+            saved.append(base_name)
+        return {"status": "ok", "saved": len(saved), "files": sorted(saved)}
+    finally:
+        Path(path).unlink(missing_ok=True)
 
 
 def import_upload(path, filename, user_id):
@@ -91,6 +137,64 @@ class UploadHandler(BaseHandler):
         self.upload.close()
         try:
             future = submit(import_upload, self.upload_path, self.filename, str(self.account["_id"]))
+            self.worker_owns_file = True
+            result = await asyncio.shield(asyncio.wrap_future(future))
+            self.write(result)
+        except (ValueError, zipfile.BadZipFile) as exc:
+            raise HTTPError(400, reason=str(exc))
+        finally:
+            self._cleanup()
+
+    def _cleanup(self):
+        if self.upload is not None:
+            self.upload.close()
+        if self.upload_path and not self.worker_owns_file:
+            Path(self.upload_path).unlink(missing_ok=True)
+
+    def on_connection_close(self):
+        self._cleanup()
+
+    def on_finish(self):
+        self._cleanup()
+
+
+@stream_request_body
+class MediaUploadHandler(BaseHandler):
+    """Stream media files or a media ZIP archive into data/<dataset_id>/media/."""
+
+    def initialize(self):
+        self.upload = None
+        self.upload_path = None
+        self.worker_owns_file = False
+        self.received = 0
+        self.dataset_id = ""
+        self.filename = ""
+
+    def prepare(self):
+        if self.request.method != "POST":
+            raise HTTPError(405)
+        account = current_account(self.current_user)
+        self.dataset_id = self.request.headers.get("X-Dataset-Id", "").strip()
+        authorize_dataset(account, self.dataset_id, write=True)
+        self.filename = unquote(self.request.headers.get("X-Filename", "")).strip()
+        ext = Path(self.filename).suffix.lower()
+        if not self.filename or (ext != ".zip" and ext not in ALLOWED_MEDIA_EXTENSIONS):
+            raise HTTPError(400, reason="Upload a supported media file or ZIP archive")
+        Path(Settings.DATA_PATH).mkdir(parents=True, exist_ok=True)
+        self.upload = tempfile.NamedTemporaryFile(prefix=".media-", dir=Settings.DATA_PATH, delete=False)
+        self.upload_path = self.upload.name
+
+    def data_received(self, chunk):
+        self.received += len(chunk)
+        if self.received > MAX_MEDIA_UPLOAD_BYTES:
+            self._cleanup()
+            raise HTTPError(413, reason="Media upload exceeds 2 GiB limit")
+        self.upload.write(chunk)
+
+    async def post(self):
+        self.upload.close()
+        try:
+            future = submit(save_point_media, self.upload_path, self.filename, self.dataset_id)
             self.worker_owns_file = True
             result = await asyncio.shield(asyncio.wrap_future(future))
             self.write(result)

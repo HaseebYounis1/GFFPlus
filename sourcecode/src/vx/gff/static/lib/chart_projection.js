@@ -112,13 +112,17 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
     var lassoPath;
     var closePath;
     var isGroupBDrag = false;
+    var dragStartPoint = null;
+    var didDrag = false;
 
     var drag = d3.drag()
         .on("start", function () {
             var srcEvt = d3.event && d3.event.sourceEvent ? d3.event.sourceEvent : null;
             isGroupBDrag = !!(srcEvt && srcEvt.shiftKey) || (selfgff.ispresskey == 2);
             var strokeColor = isGroupBDrag ? '#ff7043' : '#00acc1';
-            lassoPolygon = [d3.mouse(this)];
+            dragStartPoint = d3.mouse(this);
+            didDrag = false;
+            lassoPolygon = [dragStartPoint];
             if (lassoPath) {
                 lassoPath.remove();
             }
@@ -139,6 +143,15 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
         })
         .on("drag", function () {
             var point = d3.mouse(this);
+            if (!didDrag && dragStartPoint) {
+                var dist = Math.hypot(point[0] - dragStartPoint[0], point[1] - dragStartPoint[1]);
+                if (dist >= 4) {
+                    didDrag = true;
+                }
+            }
+            if (!didDrag) {
+                return;
+            }
             lassoPolygon.push(point);
             lassoPath.attr('d', polygonToPath(lassoPolygon));
             closePath
@@ -147,8 +160,19 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
                 .attr('opacity', 1);
         })
         .on("end", function () {
-            closePath.remove();
-            closePath = null;
+            if (closePath) {
+                closePath.remove();
+                closePath = null;
+            }
+            if (!didDrag) {
+                if (lassoPath) {
+                    lassoPath.remove();
+                    lassoPath = null;
+                }
+                lassoPolygon = null;
+                dragStartPoint = null;
+                return;
+            }
             lassoPath.attr('d', polygonToPath(lassoPolygon) + 'Z');
             var brushedIds = [];
             self.container.selectAll(".dot").each(function (d, i) {
@@ -176,6 +200,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
             lassoPath.remove();
             lassoPath = null;
             lassoPolygon = null;
+            dragStartPoint = null;
             if (selfgff.onInstanceSelectionChanged) {
                 selfgff.onInstanceSelectionChanged(self.selected, self.selectedB);
             }
@@ -289,12 +314,40 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
             selfgff.hideToolpiltex();
         })
         .on("click", function (d) {
-            if (selfgff.showPointFileDetails) {
+            if (self.focusPoint) {
+                self.focusPoint(d.id);
+            }
+            if (selfgff.openPointDataModal) {
+                selfgff.openPointDataModal(d.id);
+            } else if (selfgff.showPointFileDetails) {
                 selfgff.showPointFileDetails(d.id);
             }
             d3.event.stopPropagation();
         })
         .merge(self.nodesc);
+
+    this.focusRingLayer = this.container.append("g").attr("class", "focus-ring-layer");
+    this.focusPoint = function (pointId) {
+        self.focusRingLayer.selectAll("*").remove();
+        if (pointId === null || pointId === undefined) return;
+        var pt = null;
+        for (var i = 0; i < data.length; ++i) {
+            if (String(data[i].id) === String(pointId)) {
+                pt = data[i];
+                break;
+            }
+        }
+        if (!pt) return;
+        var baseR = parseFloat(selfgff.instvertexratio) || 4;
+        self.focusRingLayer.append("circle")
+            .attr("cx", xMap(pt))
+            .attr("cy", yMap(pt))
+            .attr("r", baseR + 5.5)
+            .style("fill", "rgba(255, 23, 68, 0.18)")
+            .style("stroke", "#ff1744")
+            .style("stroke-width", 2.5)
+            .style("pointer-events", "none");
+    };
 
     this.highlight = function (view, ids, idsB) {
         var setA = new Set((ids || []).map(function (x) { return parseInt(x, 10); }));

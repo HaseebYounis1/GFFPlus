@@ -55,7 +55,7 @@ from vx.com.py.database.MongoDB import *
 class Query(BaseHandler):
     STALE_WORKING_TIMEOUT_SECONDS = 15 * 60
 
-    READ_TYPES = {2, 4, 5, 12, 17, 18, 22, 24}
+    READ_TYPES = {2, 4, 5, 12, 17, 18, 22, 24, 29}
     _xai_running = set()
 
     def _request(self):
@@ -63,7 +63,7 @@ class Query(BaseHandler):
         try:
             app = DataTransfer(self.get_argument("data"))
             kind = app.argms["type"]
-            if not isinstance(kind, int) or kind not in set(range(29)) - {3, 14, 15, 16}:
+            if not isinstance(kind, int) or kind not in set(range(30)) - {3, 14, 15, 16}:
                 raise ValueError()
         except (ValueError, TypeError, KeyError):
             raise tornado.web.HTTPError(400, reason="Invalid query")
@@ -241,6 +241,9 @@ class Query(BaseHandler):
 
             elif app.argms["type"]==28:
                 obj = ujson.dumps(Query.subspacePerturbationPreview(app));
+
+            elif app.argms["type"]==29:
+                obj = ujson.dumps(Query.listPointMedia(app));
 
 
         #except Exception as e:
@@ -824,6 +827,24 @@ class Query(BaseHandler):
     @staticmethod
     def subspacePerturbationPreview(app):
         return MakeProjection.preview_perturbation(app.argms)
+
+    @staticmethod
+    def listPointMedia(app):
+        from urllib.parse import quote
+        dataset_id = str(app.argms["file"])
+        directory = dataset_path(dataset_id)
+        media_dir = directory / "media"
+        if not media_dir.is_dir():
+            return {"status": "ok", "files": []}
+        files = []
+        for entry in sorted(media_dir.iterdir(), key=lambda p: p.name.lower()):
+            if entry.is_file() and not entry.is_symlink() and not entry.name.startswith("."):
+                files.append({
+                    "name": entry.name,
+                    "url": "./data/{}/media/{}".format(dataset_id, quote(entry.name)),
+                    "size": entry.stat().st_size,
+                })
+        return {"status": "ok", "files": files}
 
     @staticmethod
     def makeInstancesLabels(app):

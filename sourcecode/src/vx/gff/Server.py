@@ -36,16 +36,25 @@ class DatasetDownloadHandler(tornado.web.StaticFileHandler):
     async def get(self, path, include_body=True):
         user = current_account(self.get_secure_cookie("user"))
         parts = path.split("/")
-        if len(parts) != 2 or parts[1] not in {
+        if len(parts) == 2 and parts[1] in {
             "sample.csv", "transform.csv", "original.csv", "working.csv", "row_ids.json", "sample_row_ids.json"
         }:
-            raise tornado.web.HTTPError(404)
-        authorize_dataset(user, parts[0])
-        directory = dataset_path(parts[0])
-        if (directory / parts[1]).resolve().parent != directory:
-            raise tornado.web.HTTPError(403)
-        self.set_header("Cache-Control", "private, no-store")
-        return await super().get(path, include_body)
+            authorize_dataset(user, parts[0])
+            directory = dataset_path(parts[0])
+            if (directory / parts[1]).resolve().parent != directory:
+                raise tornado.web.HTTPError(403)
+            self.set_header("Cache-Control", "private, no-store")
+            return await super().get(path, include_body)
+        if len(parts) == 3 and parts[1] == "media" and parts[2] and not parts[2].startswith("."):
+            authorize_dataset(user, parts[0])
+            directory = dataset_path(parts[0])
+            media_dir = (directory / "media").resolve()
+            target_file = (media_dir / parts[2]).resolve()
+            if target_file.parent != media_dir or not target_file.is_file():
+                raise tornado.web.HTTPError(404)
+            self.set_header("Cache-Control", "private, max-age=300")
+            return await super().get(path, include_body)
+        raise tornado.web.HTTPError(404)
 
 
 class Server(tornado.web.Application):
@@ -62,13 +71,14 @@ class Server(tornado.web.Application):
             Settings.COOKIE_SECRET = secret_path.read_text(encoding="ascii").strip()
             if len(Settings.COOKIE_SECRET) < 32:
                 raise RuntimeError("Invalid session secret file")
-        from vx.gff.Upload import UploadHandler
+        from vx.gff.Upload import UploadHandler, MediaUploadHandler
         handlers = [
             (r"/", Index),
             (r"/login", Login),
             (r"/logout", Logout),
             (r"/query", Query),
             (r"/upload", UploadHandler),
+            (r"/upload_media", MediaUploadHandler),
             (r"/favicon\.ico", FaviconHandler, {"path": Settings.STATIC_PATH + "/img"}),
 
             (r"/lib/(.*)",tornado.web.StaticFileHandler, {"path": Settings.STATIC_PATH+"/lib"},),
