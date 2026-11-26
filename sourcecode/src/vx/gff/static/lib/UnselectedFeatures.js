@@ -250,7 +250,7 @@ function UnselectedFeatures(btnid, contid, selfgff) {
                                 min-width: 240px;
                                 border: solid 1px #ccc;
                                 text-align: left;
-                                z-index: 9;`);
+                                z-index: 1050;`);
 
         var div1 = document.createElement("DIV");
         div1.setAttribute("style",`padding: 4px;`);

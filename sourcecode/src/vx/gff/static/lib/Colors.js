@@ -163,7 +163,7 @@ function ColorPalette(id="rainbow") {
                 border: 1px solid #999;
                 margin-top: -150px;
                 margin-left: -300px;
-                z-index: 10;
+                z-index: 2000;
                 display: none;
 
             "

@@ -323,7 +323,7 @@ function MonitorProcess(selff) {
                                     left: 40px;
                                     top: 0;
                                     background: rgba(21, 22, 40, 0.9);
-                                    z-index: 10;`);
+                                    z-index: 10050;`);
         container.innerHTML = win;
         
         //removechilds("idmodelcontent");
@@ -458,7 +458,7 @@ function MonitorProcess(selff) {
                                     left: 40px;
                                     top: 0;
                                     background: rgba(21, 22, 40, 0.9);
-                                    z-index: 10;`);
+                                    z-index: 10050;`);
         container.innerHTML = win;
         
         //removechilds("idmodelcontent");

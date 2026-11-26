@@ -2764,7 +2764,9 @@ function GraphFromFeatures() {
 
                 cx = (xi / wwwd) * 17.0;
                 cy = (yi / wwwd) * 17.0;
-                self.layoutfeatures.translatte(cx, cy);
+                if (self.layoutfeatures && self.layoutfeatures.translatte) {
+                    self.layoutfeatures.translatte(cx, cy);
+                }
             }
         }
     };
@@ -3075,6 +3077,9 @@ function GraphFromFeatures() {
     };
 
     this.showedgebundlingX = function () {
+        if (!self.layoutfeatures || !self.layoutfeatures.showedgebundling) {
+            return;
+        }
         if (self.layoutfeatures.isupdatebundling) {
             setTimeout( function () {
                             MOPRO.show("making edge bundling");
@@ -3217,24 +3222,39 @@ function GraphFromFeatures() {
     };
 
     this.featureselectionbyfiltername = function (txt2filter) {
-        featsel = [];
-        txtfilter = txt2filter.split('&&');
+        var featsel = [];
+        var txtfilter = String(txt2filter || "").split('&&');
+        var lowerLookup = {};
+        for (var fname in self.lfenamesindex) {
+            if (Object.prototype.hasOwnProperty.call(self.lfenamesindex, fname)) {
+                lowerLookup[fname.toLowerCase()] = self.lfenamesindex[fname];
+            }
+        }
 
-        nfilter = [];
+        var nfilter = [];
         for (var wd of txtfilter) {
             wd = trim(wd);
-            wd = self.lfenamesindex[wd];
-            if (wd in self.auxfeatureselectedf) {
-                index = self.auxfeatureselectedf[wd]
+            if (!wd) continue;
+            var fid = self.lfenamesindex[wd];
+            if (fid === undefined) {
+                fid = lowerLookup[wd.toLowerCase()];
+            }
+            if (fid !== undefined && (fid in self.auxfeatureselectedf)) {
+                var index = self.auxfeatureselectedf[fid];
                 featsel.push(index);
-                nfilter.push(self.datagff.fenames[wd]);
+                nfilter.push(self.datagff.fenames[fid]);
             }
         }
         if (featsel.length > 0) {
             self.featureselected = featsel;
-            self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
+            self.normalizeFeatureSelection();
+            if (self.layoutfeatures && self.layoutfeatures.highlightforce) {
+                self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
+            }
             gelem("fesenanetxt").value = nfilter.join('&&');
             self.onFeatureSelectionChanged({"skipFeatureHighlight": true});
+        } else {
+            self.mw.alert("Filter", "No matching feature names found. Separate multiple feature names with &&.");
         }
     };
 
@@ -3402,8 +3422,12 @@ function GraphFromFeatures() {
             CCTT.id = c;
             ProjectionColorF = CCTT.interpolate();
 
-            self.layoutinstance.projectioncolorf = ProjectionColorF;
-            self.layoutinstance.updatecolors();
+            if (self.layoutinstance) {
+                self.layoutinstance.projectioncolorf = ProjectionColorF;
+                if (self.layoutinstance.updatecolors) {
+                    self.layoutinstance.updatecolors();
+                }
+            }
         }
     };
 

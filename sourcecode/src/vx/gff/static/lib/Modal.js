@@ -77,14 +77,13 @@ function ModalWindow() {
         <div  id="idwinmodal" 
             style="
             display: none;
-            z-index: 99999999;
             position: fixed;
             width: 100%;
             height: 100%;
             left: 0;
             top: 0;
             background: rgba(21, 22, 40, 0.9);
-            z-index: 10;
+            z-index: 10050;
             "
         >
             <div

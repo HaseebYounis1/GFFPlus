@@ -564,7 +564,7 @@
                                                                     border: 1px solid #ccc;
                                                                     margin-top: -250px;
                                                                     margin-left: -250px;
-                                                                    z-index: 2;
+                                                                    z-index: 15;
                                                                     display: none;
 
                                                                 "
@@ -659,8 +659,10 @@
                                                                     <div style="height: 3px"></div>
                                                                     <a href="#" class="btn btn-dark btn-sm"
                                                                             onclick="
-                                                                               GFFOBJ.layoutfeatures.stopplayforce();
-
+                                                                               event.preventDefault();
+                                                                               if (GFFOBJ.layoutfeatures && GFFOBJ.layoutfeatures.stopplayforce) {
+                                                                                   GFFOBJ.layoutfeatures.stopplayforce();
+                                                                               }
                                                                             "
                                                                             title="Play/Stop"
                                                                             style="width: 100%;
@@ -678,7 +680,10 @@
 
                                                                     <a href="#" class="btn btn-danger btn-sm"
                                                                         onclick="
-                                                                            GFFOBJ.layoutfeatures.showedges();
+                                                                            event.preventDefault();
+                                                                            if (GFFOBJ.layoutfeatures && GFFOBJ.layoutfeatures.showedges) {
+                                                                                GFFOBJ.layoutfeatures.showedges();
+                                                                            }
                                                                         "
                                                                         title="Show edges"
                                                                         style="width: 100%;
@@ -866,7 +871,9 @@
                                                                         "
                                                                         onchange="
                                                                              var pct = this.value/15.0;
-                                                                             GFFOBJ.layoutfeatures.updatesizecircle(pct);
+                                                                             if (GFFOBJ.layoutfeatures && GFFOBJ.layoutfeatures.updatesizecircle) {
+                                                                                 GFFOBJ.layoutfeatures.updatesizecircle(pct);
+                                                                             }
                                                                         "
                                                                         onmousemove="
                                                                             numb = (this.value/15)*100.0;
@@ -901,7 +908,9 @@
                                                                         "
                                                                         onchange="
                                                                             GFFOBJ.edgetransparency = (this.value/100.0);
-                                                                            GFFOBJ.layoutfeatures.updateedgestransparency();
+                                                                            if (GFFOBJ.layoutfeatures && GFFOBJ.layoutfeatures.updateedgestransparency) {
+                                                                                GFFOBJ.layoutfeatures.updateedgestransparency();
+                                                                            }
                                                                         "
                                                                         onmousemove="
                                                                             numb = this.value;
@@ -972,7 +981,9 @@
                                                             GFFOBJ.exchageslider = 0;
                                                         }
                                                         gelem('edgeslider').style.transform = 'rotate('+GFFOBJ.exchageslider+'deg)';
-                                                        GFFOBJ.layoutfeatures.updatelinkoption(gelem('edgeslider').value,'percen');
+                                                        if (GFFOBJ.layoutfeatures && GFFOBJ.layoutfeatures.updatelinkoption) {
+                                                            GFFOBJ.layoutfeatures.updatelinkoption(gelem('edgeslider').value,'percen');
+                                                        }
                                                     "
                                                 >
                                                     <i class="fas fa-exchange-alt" style="padding: 0; margin: 0; width: 100%; color: #fff;"></i>
@@ -982,7 +993,9 @@
                                                 title="Add edges"
                                                 style="flex: 1 1 auto; min-width: 0; margin: 0; padding: 0;"
                                                 onchange="
-                                                    GFFOBJ.layoutfeatures.updatelinkoption(this.value,'percen');
+                                                    if (GFFOBJ.layoutfeatures && GFFOBJ.layoutfeatures.updatelinkoption) {
+                                                        GFFOBJ.layoutfeatures.updatelinkoption(this.value,'percen');
+                                                    }
                                                     numb = (Math.pow(this.value,3.0)/1000000000000.0)*100.0;
                                                     numb = numb.toFixed(2);
                                                     gelem('idperce').innerHTML = numb+'%';
@@ -1115,7 +1128,7 @@
                                                                     border: 1px solid #ccc;
                                                                     margin-top: -250px;
                                                                     margin-left: -250px;
-                                                                    z-index: 2;
+                                                                    z-index: 15;
                                                                     display: none;
 
                                                                 "
@@ -1356,7 +1369,9 @@
                                                                         "
                                                                         onchange="
                                                                             GFFOBJ.instvertexratio = this.value;
-                                                                            GFFOBJ.layoutinstance.updatesizeandopacity();
+                                                                            if (GFFOBJ.layoutinstance && GFFOBJ.layoutinstance.updatesizeandopacity) {
+                                                                                GFFOBJ.layoutinstance.updatesizeandopacity();
+                                                                            }
                                                                         "
                                                                         onmousemove="
                                                                             numb = this.value;
@@ -1389,7 +1404,9 @@
                                                                         "
                                                                         onchange="
                                                                             GFFOBJ.instvertexoacity = (this.value/100.0);
-                                                                            GFFOBJ.layoutinstance.updatesizeandopacity();
+                                                                            if (GFFOBJ.layoutinstance && GFFOBJ.layoutinstance.updatesizeandopacity) {
+                                                                                GFFOBJ.layoutinstance.updatesizeandopacity();
+                                                                            }
                                                                         "
                                                                         onmousemove="
                                                                             numb = this.value;
