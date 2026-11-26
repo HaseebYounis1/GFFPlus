@@ -3269,57 +3269,81 @@ function GraphFromFeatures() {
 
     this.viewFeaturesSelected = function (opt) {
         let datfe = [];
-        let maxv = -1;
+        let maxv = 0;
         let title = "";
+        var chartSize = Math.max(360, Math.min(480, (parseInt(self.lwidth, 10) || 500) - 16));
         if (opt == "feature") {
-            title = self.datagff.configfeature.relevance;
+            title = (self.datagff && self.datagff.configfeature && self.datagff.configfeature.relevance)
+                ? self.datagff.configfeature.relevance : "Selected Features";
+            var cfgNodes = (self.datagff && self.datagff.configfeature && Array.isArray(self.datagff.configfeature.nodes))
+                ? self.datagff.configfeature.nodes : [];
+            self.normalizeFeatureSelection();
             for (var i of self.featureselected) {
                 var item = self.getNode(i);
-                score = self.datagff.configfeature.nodes[item.name].weight;
+                if (!item || item.category == 1) continue;
+                var rawScore = (item.weight !== undefined && item.weight !== null)
+                    ? parseFloat(item.weight)
+                    : ((cfgNodes[item.name] && cfgNodes[item.name].weight !== undefined)
+                        ? parseFloat(cfgNodes[item.name].weight) : 0.0);
+                if (!isFinite(rawScore)) rawScore = 0.0;
                 datfe.push({
                     "label": item.label,
-                    "color": VertexColorF(score),
-                    "score": score,
-                    "scorenorm": score,
+                    "color": VertexColorF(rawScore),
+                    "score": rawScore,
+                    "scorenorm": rawScore,
                 });
-                if (score > maxv) {
-                    maxv = score;
+                if (rawScore > maxv) {
+                    maxv = rawScore;
                 }
             }
 
-            for (var i in datfe) {
-                datfe[i]["scorenorm"] = datfe[i]["scorenorm"] / maxv;
+            var denom = maxv > 0 ? maxv : 1.0;
+            for (var k = 0; k < datfe.length; ++k) {
+                datfe[k]["scorenorm"] = maxv > 0 ? (datfe[k]["scorenorm"] / denom) : 1.0;
             }
-            if (datfe.length>0){
-                gelem("featselectfeaturetitle").innerHTML = title;
-                chart_circularhist(self, datfe, "#featselectfeaturecontent", 500, 500);
+            gelem("featselectfeaturetitle").innerHTML = title + " (" + datfe.length + ")";
+            if (datfe.length > 0) {
+                gelem("featselectfeaturecontent").innerHTML = "";
+                chart_circularhist(self, datfe, "#featselectfeaturecontent", chartSize, chartSize);
+            } else {
+                gelem("featselectfeaturecontent").innerHTML =
+                    "<div style='padding: 40px 16px; color: #475569; text-align: center;'>No features selected. Select features from the feature graph first.</div>";
             }
         }
         else if (opt == "instance") {
-            //console.log("WW", self.datagff);
-            title = self.datagff.configinstance.relevance;
-            var featt = self.datagff.configinstance.featureselected;
+            title = (self.datagff && self.datagff.configinstance && self.datagff.configinstance.relevance)
+                ? self.datagff.configinstance.relevance : "Instance Features";
+            var featt = (self.datagff && self.datagff.configinstance && Array.isArray(self.datagff.configinstance.featureselected))
+                ? self.datagff.configinstance.featureselected : [];
+            var insNodes = (self.datagff && self.datagff.configinstance && Array.isArray(self.datagff.configinstance.nodes))
+                ? self.datagff.configinstance.nodes : [];
             for (var e of featt) {
-                var i = self.auxfeatureselectedi[e];
-                var item = self.datagff.configinstance.nodes[i];
-                //console.log("self.datagff.configinstance", self.datagff.configinstance);
-                score = item.weight;
+                var idx = self.auxfeatureselectedi[e];
+                var item = insNodes[idx];
+                if (!item || item.category == 1) continue;
+                var rawScore = parseFloat(item.weight || 0.0);
+                if (!isFinite(rawScore)) rawScore = 0.0;
                 datfe.push({
                     "label": item.label,
-                    "color": VertexColorF(score),
-                    "score": score,
-                    "scorenorm": score,
+                    "color": VertexColorF(rawScore),
+                    "score": rawScore,
+                    "scorenorm": rawScore,
                 });
-                if (score > maxv) {
-                    maxv = score;
+                if (rawScore > maxv) {
+                    maxv = rawScore;
                 }
             }
-            for (var i in datfe) {
-                datfe[i]["scorenorm"] = datfe[i]["scorenorm"] / maxv;
+            var denomI = maxv > 0 ? maxv : 1.0;
+            for (var m = 0; m < datfe.length; ++m) {
+                datfe[m]["scorenorm"] = maxv > 0 ? (datfe[m]["scorenorm"] / denomI) : 1.0;
             }
-            if (datfe.length>0){
-                gelem("featselectinstancetitle").innerHTML = title;
-                chart_circularhist(self, datfe, "#featselectinstancecontent", 500, 500);
+            gelem("featselectinstancetitle").innerHTML = title + " (" + datfe.length + ")";
+            if (datfe.length > 0) {
+                gelem("featselectinstancecontent").innerHTML = "";
+                chart_circularhist(self, datfe, "#featselectinstancecontent", chartSize, chartSize);
+            } else {
+                gelem("featselectinstancecontent").innerHTML =
+                    "<div style='padding: 40px 16px; color: #475569; text-align: center;'>No features recorded for the current projection.</div>";
             }
         }
     };

@@ -366,7 +366,8 @@ table{
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 #mainlayout .gff-canvas-box-left {
@@ -402,8 +403,9 @@ table{
   justify-content: center;
   align-items: center;
   box-sizing: border-box;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
+  position: relative;
+  z-index: 20;
 }
 
 #mainlayout .gff-overlay-bar {

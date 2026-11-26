@@ -773,18 +773,21 @@
                                                                             ></i>
                                                                         </a>
                                                                         <div class="dropdown-menu" 
-                                                                            style="width: 380px; padding: 3px; background-color: #f1f1f1;"
+                                                                            style="width: 380px; padding: 5px; background-color: #f1f1f1; z-index: 1050; box-shadow: 0 4px 14px rgba(0,0,0,0.22);"
+                                                                            onclick="event.stopPropagation();"
                                                                         >
-                                                                            <div class="input-group">
-                                                                                <div class="input-group-append">
-                                                                                    <button class="btn" type="button"
+                                                                            <div class="input-group input-group-sm">
+                                                                                <div class="input-group-prepend">
+                                                                                    <button class="btn btn-outline-secondary" type="button"
                                                                                         title="Close"
+                                                                                        onclick="jQuery(this).closest('.dropleft').find('[data-toggle=dropdown]').dropdown('hide');"
                                                                                     >
                                                                                         <i class="fa fa-times" aria-hidden="true"></i>
                                                                                     </button>
                                                                                 </div>
                                                                                 <input id="fesenanetxt" type="text" class="form-control"
-                                                                                    placeholder="e.g. attributename1&&attributename2&&attributename3"
+                                                                                    placeholder="e.g. attr1&&attr2&&attr3"
+                                                                                    onkeydown="if (event.key === 'Enter') { event.preventDefault(); GFFOBJ.featureselectionbyfiltername(this.value); }"
                                                                                 >
                                                                                 <div class="input-group-append">
                                                                                     <button class="btn btn-primary" type="button"
