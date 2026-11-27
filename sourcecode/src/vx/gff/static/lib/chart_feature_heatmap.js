@@ -6,7 +6,7 @@ function chart_feature_heatmap(idview, selft, vertexcolorf, edgecolorf) {
     var self = this;
 
     self.width = selft.lwidth;
-    self.height = selft.lwidth;
+    self.height = selft.lheight || selft.lwidth;
     self.graph = selft.datagff.layoutfeature["graph"];
     self.treehi = selft.datagff.layoutfeature["treehi"] || [];
     self.vertexcolorf = vertexcolorf;

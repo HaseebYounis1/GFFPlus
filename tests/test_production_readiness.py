@@ -200,6 +200,44 @@ class TestStaticUIAndDOMIntegrity(unittest.TestCase):
         self.assertIn("if (!self.layoutfeatures)", self.libdata_js)
         self.assertIn("No matching feature names found", self.libdata_js)
 
+    def test_target_selection_reads_dropdown_first(self):
+        """Ensure changing #target is never snapped back to an older self.target."""
+        idx = self.libdata_js.find("this.getTargetId = function")
+        self.assertNotEqual(idx, -1)
+        body = self.libdata_js[idx:idx + 600]
+        pos_el = body.find("targetElement.value")
+        pos_self = body.find("parseInt(self.target")
+        self.assertNotEqual(pos_el, -1, "getTargetId must read targetElement.value")
+        self.assertNotEqual(pos_self, -1, "getTargetId must fall back to self.target")
+        self.assertLess(
+            pos_el,
+            pos_self,
+            "getTargetId must read #target dropdown BEFORE falling back to cached self.target",
+        )
+        self.assertIn('ob.in.argms["target"] = self.getTargetId();', self.libdata_js)
+        self.assertNotIn('ob.in.argms["target"] = self.target;', self.libdata_js)
+
+    def test_responsive_fullscreen_layout_contract(self):
+        """Ensure panels scale to full viewport width/height with resize handling and no 720px cap."""
+        self.assertIn("computeResponsivePanelDimensions", self.libdata_js)
+        self.assertIn("applyPanelDimensions", self.libdata_js)
+        self.assertIn("handleViewportResize", self.libdata_js)
+        self.assertIn('window.addEventListener("resize"', self.libdata_js)
+        self.assertNotIn("Math.min(720", self.libdata_js)
+        for chart_name in (
+            "chart_force.js",
+            "chart_projection.js",
+            "chart_bipartite.js",
+            "chart_circularbundle.js",
+            "chart_feature_community.js",
+            "chart_feature_heatmap.js",
+            "chart_upset.js",
+            "chart_circlepack.js",
+            "chart_sunburst.js",
+        ):
+            txt = (STATIC_LIB / chart_name).read_text(encoding="utf-8", errors="ignore")
+            self.assertIn("lheight", txt, f"{chart_name} must support responsive lheight")
+
 
 class TestLiveServerEndToEnd(AsyncHTTPTestCase):
     def setUp(self):
@@ -487,6 +525,112 @@ class TestLiveServerEndToEnd(AsyncHTTPTestCase):
             headers={"Cookie": self._cookie_header()},
         )
         self.assertIn(r_trav.code, (400, 403, 404))
+
+    def test_switching_between_multiple_target_variables_end_to_end(self):
+        """Users must be able to pick ANY column (string health labels, cluster IDs,
+        or standard class) as the target variable and re-project / re-score cleanly."""
+        xsrf = self._login()
+
+        csv_lines = ["f1,f2,f3,f4,health_condition,cluster_k,Category"]
+        conditions = ["healthy", "diabetic", "hypertensive"]
+        for i in range(18):
+            cond = conditions[i % 3]
+            clust = i % 3
+            cat = 0 if i < 9 else 1
+            base = (clust + 1) * 3.0
+            csv_lines.append(
+                f"{base + i*0.05:.2f},{base*1.2 + i*0.03:.2f},{cat*5.0 + i*0.1:.2f},{i*0.2:.2f},{cond},{clust},{cat}"
+            )
+        csv_bytes = ("\n".join(csv_lines) + "\n").encode("utf-8")
+        r_up = self.fetch(
+            "/upload",
+            method="POST",
+            body=csv_bytes,
+            headers={
+                "Cookie": self._cookie_header(),
+                "Content-Type": "application/octet-stream",
+                "X-Filename": "multi_target.csv",
+                "X-Xsrftoken": xsrf,
+            },
+        )
+        self.assertEqual(r_up.code, 200, f"/upload failed: {r_up.body}")
+        ds_id = json.loads(r_up.body.decode("utf-8"))["file"]
+
+        def _wait_ready(collect, query_paths, timeout_s=15.0):
+            import time
+            deadline = time.time() + timeout_s
+            last = None
+            while time.time() < deadline:
+                r = self._post_query({
+                    "type": 24,
+                    "file": ds_id,
+                    "data": {"collect": collect, "query": query_paths},
+                })
+                self.assertEqual(r.code, 200)
+                last = json.loads(r.body.decode("utf-8"))
+                if last.get("statusopt") == 0:
+                    return {item["query"][0]: item["response"] for item in last.get("response", [])}
+                time.sleep(0.05)
+            self.fail(f"Timed out waiting for {collect}: {last}")
+
+        fenames = _wait_ready("init", [["fenames"]])["fenames"]
+        feat_indices = [fenames.index(c) for c in ("f1", "f2", "f3", "f4")]
+
+        for target_col, expected_labels in (
+            ("health_condition", {"healthy", "diabetic", "hypertensive"}),
+            ("cluster_k", {"0", "1", "2"}),
+            ("Category", {"0", "1"}),
+        ):
+            t_idx = fenames.index(target_col)
+            r_fg = self._post_query({
+                "type": 0,
+                "file": ds_id,
+                "target": t_idx,
+                "intarget": False,
+                "proximity": "Cosine",
+                "instanceproximity": "Euclidean",
+                "submodular_size": 3000,
+                "relevance": "Pearson",
+                "algorithm": "mst",
+                "layout": "fo",
+                "isfeature": 1,
+                "featureselected": feat_indices,
+                "ranking": [],
+                "idinstanceslabels": -1,
+                "statusval": f"fg-{target_col}",
+            })
+            self.assertEqual(r_fg.code, 200)
+            fg = _wait_ready("features", [["layoutfeature"]])["layoutfeature"]
+            self.assertGreaterEqual(len(fg.get("graph", {}).get("nodes", [])), 4)
+
+            r_pr = self._post_query({
+                "type": 1,
+                "file": ds_id,
+                "threshold": 0.78,
+                "target": t_idx,
+                "intarget": False,
+                "proximity": "Cosine",
+                "instanceproximity": "Euclidean",
+                "submodular_size": 3000,
+                "relevance": "Pearson",
+                "algorithm": "mst",
+                "layout": "fo",
+                "projection": "PCA",
+                "isfeature": 0,
+                "featureselected": feat_indices,
+                "ranking": [],
+                "idinstanceslabels": -1,
+                "statusval": f"proj-{target_col}",
+            })
+            self.assertEqual(r_pr.code, 200)
+            inst = _wait_ready("instances", [["layoutinstance"]])["layoutinstance"]
+            self.assertEqual(len(inst.get("points", [])), 18)
+            label_values = {str(v) for v in inst.get("tartegsnames", {}).values()}
+            self.assertEqual(label_values, expected_labels, f"Unexpected labels for target {target_col}")
+
+            r_sil = self._post_query({"type": 13, "file": ds_id, "statusval": f"sil-{target_col}"})
+            self.assertEqual(r_sil.code, 200)
+            self.assertIsInstance(json.loads(r_sil.body.decode("utf-8")), (int, float))
 
 
 if __name__ == "__main__":

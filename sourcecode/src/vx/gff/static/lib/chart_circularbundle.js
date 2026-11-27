@@ -152,7 +152,7 @@ function chart_circularbundle_gff(idview, selft, vertexcolorf, edgecolorf) {
     var self = this;
 
     self.width = selft.lwidth;
-    self.height = selft.lwidth;
+    self.height = selft.lheight || selft.lwidth;
     self.graph = selft.datagff.layoutfeature["graph"];
     self.vertexcolorf = vertexcolorf;
     self.edgecolorf = edgecolorf;

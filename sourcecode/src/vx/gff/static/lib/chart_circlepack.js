@@ -10,7 +10,7 @@
 function chart_circlepack(idview, selft, vertexcolorf){
     var self = this;
     
-    self.w = selft.lwidth;
+    self.w = Math.min(selft.lwidth, selft.lheight || selft.lwidth);
     self.graph = selft.datagff.layoutfeature["graph"];
     self.vertexcolorf = vertexcolorf;
 

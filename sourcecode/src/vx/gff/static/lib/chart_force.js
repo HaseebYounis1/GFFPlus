@@ -13,7 +13,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     self.vertexcolorf = vertexcolorf;
     self.edgecolorf = edgecolorf;
     self.width = selft.lwidth;
-    self.height = selft.lwidth;
+    self.height = selft.lheight || selft.lwidth;
     self.graph = selft.datagff.layoutfeature["graph"];
     self.ranking = selft.datagff.layoutfeature["ranking"];
     self.treehi = selft.datagff.layoutfeature["treehi"];

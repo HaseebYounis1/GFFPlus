@@ -199,15 +199,22 @@ function GraphFromFeatures() {
     //this.ranking = [];
     this.datafileselected = "";
     this.datafileselectedname = "";
-    this.computeStablePanelSize = function () {
-        var vw = window.innerWidth || window.screen.availWidth || 1280;
-        var vh = window.innerHeight || window.screen.availHeight || 800;
-        // Account for left nav (~56px), outer padding (20px), gap (8px), and 2x 58px panel chrome
-        var byWidth = Math.floor((vw - 208) / 2);
-        var byHeight = Math.floor(vh - 205);
-        return Math.max(480, Math.min(720, Math.min(byWidth, byHeight)));
+    this.computeResponsivePanelDimensions = function () {
+        var vw = window.innerWidth || document.documentElement.clientWidth || window.screen.availWidth || 1280;
+        var vh = window.innerHeight || document.documentElement.clientHeight || window.screen.availHeight || 800;
+        // Left nav (~52px) + outer padding (12px) + panel gap (8px) + 2x 58px panel chrome (116px) = 188px
+        var width = Math.max(360, Math.floor((vw - 188) / 2));
+        // Top navbar (~42px) + toolbar header/controls (56px) + bottom slider bar (30px) + borders/padding (28px) = 156px
+        var height = Math.max(380, Math.floor(vh - 156));
+        return { width: width, height: height };
     };
-    this.lwidth = this.computeStablePanelSize();
+    this.computeStablePanelSize = function () {
+        return self.computeResponsivePanelDimensions().width;
+    };
+    var _initialDims = this.computeResponsivePanelDimensions();
+    this.lwidth = _initialDims.width;
+    this.lheight = _initialDims.height;
+    this._resizeTimer = null;
 
     this.isnamedbedited = false;
     this.intarget = false;
@@ -1047,13 +1054,16 @@ function GraphFromFeatures() {
     };
 
     this.getTargetId = function () {
-        var target = parseInt(self.target, 10);
         var targetElement = gelem("target");
-        if (isNaN(target) && targetElement) {
+        var target = NaN;
+        if (targetElement && targetElement.options && targetElement.options.length > 0) {
             target = parseInt(targetElement.value, 10);
+            if (isNaN(target)) {
+                target = parseInt(targetElement.selectedIndex, 10);
+            }
         }
-        if (isNaN(target) && targetElement) {
-            target = parseInt(targetElement.selectedIndex, 10);
+        if (isNaN(target) || target < 0) {
+            target = parseInt(self.target, 10);
         }
         if (isNaN(target) || target < 0) {
             var names = (self.datagff && Array.isArray(self.datagff.fenames)) ? self.datagff.fenames : [];
@@ -1062,6 +1072,7 @@ function GraphFromFeatures() {
         self.target = target;
         if (targetElement && target >= 0 && target < targetElement.options.length) {
             targetElement.selectedIndex = target;
+            targetElement.title = targetElement.options[target].text || "";
         }
         return target;
     };
@@ -1408,7 +1419,7 @@ function GraphFromFeatures() {
     this.showProjectionPanelMessage = function (left, right) {
         self.setProjectionPanelStatus(left, right);
         var width = Math.max(300, parseInt(self.lwidth, 10) || 500);
-        var height = width;
+        var height = Math.max(300, parseInt(self.lheight, 10) || width);
         d3.select("#visp").selectAll("svg").remove();
         d3.select("#seq2").selectAll("svg").remove();
         var infLeft = gelem("infleft2");
@@ -1824,7 +1835,7 @@ function GraphFromFeatures() {
             var ob = new ServiceData(status);
             ob.in.argms["type"] = 0;
             ob.in.argms["file"] = self.datafileselected;
-            ob.in.argms["target"] = self.target;
+            ob.in.argms["target"] = self.getTargetId();
             ob.in.argms["intarget"] = self.intarget;
             ob.in.argms["proximity"] = gvalue('proximity');
             ob.in.argms["instanceproximity"] = gvalue('instanceproximity');
@@ -1880,7 +1891,7 @@ function GraphFromFeatures() {
             var ob = new ServiceData(status);
             ob.in.argms["type"] = 1;
             ob.in.argms["threshold"] = 0.78;
-            ob.in.argms["target"] = self.target;
+            ob.in.argms["target"] = self.getTargetId();
             ob.in.argms["intarget"] = self.intarget;
             ob.in.argms["proximity"] = gvalue('proximity');
             ob.in.argms["instanceproximity"] = gvalue('instanceproximity');
@@ -2229,7 +2240,7 @@ function GraphFromFeatures() {
 
                             if (self.layoutfeatures.selectbythreshold) {
                                 chart_palettecolors(self.layoutfeatures.selectbythreshold,
-                                    "seq1", 20, self.lwidth-20, VertexColorF);
+                                    "seq1", 20, Math.max(200, (self.lheight || self.lwidth) - 20), VertexColorF);
                             }
                             else {
                                 d3.select("#seq1").selectAll("svg").remove();
@@ -2780,8 +2791,9 @@ function GraphFromFeatures() {
             }).filter(function (name) {
                 return name !== undefined && name !== null;
             });
-            var targetname = self.datagff.fenames[parseInt(gvalue('target'), 10)];
-            chart_correlation("#visp", self.dataload || [], featurenames, targetname, self.lwidth);
+            var targetname = self.datagff.fenames[self.getTargetId()];
+            var pairSize = Math.min(self.lwidth, self.lheight || self.lwidth);
+            chart_correlation("#visp", self.dataload || [], featurenames, targetname, pairSize);
         }
         else {
             self.showProjectionPanelMessage(
@@ -3089,27 +3101,16 @@ function GraphFromFeatures() {
         setTimeout(self.layoutfeatures.showedgebundling, 500);
     };
 
-    this.main = function () {
-        //setInterval(self.loadingverification, 3000);
-        
-
-        MOPRO.main();
-        self.mw.main();
-        
-        self.loaddatasets();
-        
-        self.shifflayoutcontrols("iddatasetlayout");
-        self.padmove(100);
-
+    this.applyPanelDimensions = function () {
         var panelIds = ["idlayout1", "idlayout2", "vis", "visp"];
         for (var pi = 0; pi < panelIds.length; ++pi) {
             var pEl = gelem(panelIds[pi]);
             if (pEl) {
                 pEl.style.width = self.lwidth + "px";
-                pEl.style.height = self.lwidth + "px";
-                pEl.style.minHeight = self.lwidth + "px";
+                pEl.style.height = self.lheight + "px";
+                pEl.style.minHeight = self.lheight + "px";
                 pEl.style.minWidth = self.lwidth + "px";
-                pEl.style.maxHeight = self.lwidth + "px";
+                pEl.style.maxHeight = self.lheight + "px";
                 pEl.style.maxWidth = self.lwidth + "px";
             }
         }
@@ -3132,11 +3133,71 @@ function GraphFromFeatures() {
             bottomDock.style.maxWidth = dockWidth + "px";
         }
 
-        gelem("idlayout1bar").style.maxHeight = self.lwidth + "px";
-        gelem("idlayout1bar").style.minHeight = self.lwidth + "px";
+        if (gelem("idlayout1bar")) {
+            gelem("idlayout1bar").style.maxHeight = self.lheight + "px";
+            gelem("idlayout1bar").style.minHeight = self.lheight + "px";
+        }
+        if (gelem("idlayout2bar")) {
+            gelem("idlayout2bar").style.maxHeight = self.lheight + "px";
+            gelem("idlayout2bar").style.minHeight = self.lheight + "px";
+        }
+    };
 
-        gelem("idlayout2bar").style.maxHeight = self.lwidth + "px";
-        gelem("idlayout2bar").style.minHeight = self.lwidth + "px";
+    this.handleViewportResize = function () {
+        var dims = self.computeResponsivePanelDimensions();
+        if (Math.abs(dims.width - self.lwidth) < 6 && Math.abs(dims.height - self.lheight) < 6) {
+            return;
+        }
+        self.lwidth = dims.width;
+        self.lheight = dims.height;
+        self.applyPanelDimensions();
+
+        // Redraw active layouts smoothly to fit the new screen dimensions
+        var mainEl = gelem("mainlayout");
+        if (mainEl && mainEl.style.display !== "none" && self.datagff) {
+            if (self.datagff.layoutfeature && self.datagff.configfeature) {
+                var savedTarget = self.getTargetId();
+                var savedSelected = Array.isArray(self.featureselected) ? self.featureselected.slice() : [];
+                self.processFeaturesResults(self.datagff);
+                if (savedTarget >= 0 && gelem("target") && savedTarget < gelem("target").options.length) {
+                    gelem("target").selectedIndex = savedTarget;
+                    self.target = savedTarget;
+                }
+                if (savedSelected.length > 0 && self.layoutfeatures && self.layoutfeatures.highlightforce) {
+                    self.featureselected = savedSelected;
+                    self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
+                }
+            }
+            if (self.datagff.layoutinstance && Array.isArray(self.datagff.layoutinstance.points) && self.datagff.layoutinstance.points.length > 0) {
+                self.processInstancesResults(self.datagff);
+            }
+        }
+    };
+
+    this.main = function () {
+        //setInterval(self.loadingverification, 3000);
+        
+
+        MOPRO.main();
+        self.mw.main();
+        
+        self.loaddatasets();
+        
+        self.shifflayoutcontrols("iddatasetlayout");
+        self.padmove(100);
+
+        self.applyPanelDimensions();
+
+        var scheduleResize = function () {
+            if (self._resizeTimer) {
+                clearTimeout(self._resizeTimer);
+            }
+            self._resizeTimer = setTimeout(function () {
+                self.handleViewportResize();
+            }, 180);
+        };
+        window.addEventListener("resize", scheduleResize);
+        document.addEventListener("fullscreenchange", scheduleResize);
 
         if (self.adminid==1 && self.multiuser==1){
             gelem("iduserlistop").style.display = "block";
@@ -3388,7 +3449,7 @@ function GraphFromFeatures() {
 
             if (self.layoutfeatures && self.layoutfeatures.selectbythreshold) {
                 chart_palettecolors(self.layoutfeatures.selectbythreshold,
-                    "seq1", 20, self.lwidth-20, VertexColorF);
+                    "seq1", 20, Math.max(200, (self.lheight || self.lwidth) - 20), VertexColorF);
             }
 
             if (self.layoutfeatures) {
@@ -3432,10 +3493,23 @@ function GraphFromFeatures() {
     };
 
     this.settarget = function () {
+        var targetElement = gelem("target");
+        if (targetElement && targetElement.options && targetElement.options.length > 0) {
+            var parsed = parseInt(targetElement.value, 10);
+            if (isNaN(parsed)) {
+                parsed = parseInt(targetElement.selectedIndex, 10);
+            }
+            if (!isNaN(parsed) && parsed >= 0) {
+                self.target = parsed;
+            }
+        }
         self.target = self.getTargetId();
+        self.normalizeFeatureSelection();
         self.populateInstanceIdDropdown();
-        self.USFOBJ.print();
-    }
+        if (self.USFOBJ && self.USFOBJ.print) {
+            self.USFOBJ.print();
+        }
+    };
 
 /*     this.loadselectfeatureid = function () {
         loadselectfeatureid

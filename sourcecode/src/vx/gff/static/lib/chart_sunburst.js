@@ -9,7 +9,7 @@
  */
 function chart_sunburst(idview, vertexcolorf, selft, argmsi){
     var self = this;
-    self.wsize =selft.lwidth;
+    self.wsize = Math.min(selft.lwidth, selft.lheight || selft.lwidth);
     //self.data = selft.datagff.layoutfeature["tree"];
     self.graph = selft.datagff.layoutfeature["graph"];
     self.root = selft.datagff.layoutfeature["root"];
