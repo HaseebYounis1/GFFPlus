@@ -200,13 +200,33 @@ function GraphFromFeatures() {
     this.datafileselected = "";
     this.datafileselectedname = "";
     this.computeResponsivePanelDimensions = function () {
-        var vw = window.innerWidth || document.documentElement.clientWidth || window.screen.availWidth || 1280;
-        var vh = window.innerHeight || document.documentElement.clientHeight || window.screen.availHeight || 800;
-        // Left nav (~52px) + outer padding (12px) + panel gap (8px) + 2x 58px panel chrome (116px) = 188px
-        var width = Math.max(360, Math.floor((vw - 188) / 2));
-        // Top navbar (~42px) + toolbar header/controls (56px) + bottom slider bar (30px) + borders/padding (28px) = 156px
-        var height = Math.max(380, Math.floor(vh - 156));
-        return { width: width, height: height };
+        var vw = document.documentElement.clientWidth || window.innerWidth || 1280;
+        var vh = window.innerHeight || document.documentElement.clientHeight || 800;
+        var wsCell = gelem("gffWorkspaceCell");
+        var availW = vw - 64;
+        var topOffset = 46;
+        if (wsCell) {
+            var rect = wsCell.getBoundingClientRect();
+            if (wsCell.clientWidth > 200) {
+                availW = wsCell.clientWidth - 16; // 8px left + 8px right padding
+            } else if (rect.left > 0) {
+                availW = vw - rect.left - 16;
+            }
+            if (rect.top > 0) {
+                topOffset = Math.ceil(rect.top);
+            }
+        }
+        // Per panel horizontal chrome: 20px left strip + 26px right strip + 6px border + 6px padding = 58px (2x = 116px)
+        // Plus 8px flex gap between panels + 4px safety margin = 128px
+        var width = Math.max(320, Math.floor((availW - 128) / 2));
+
+        // Vertical fit: keep BOTH panels AND the bottom dock (Contrastive & Counterfactual Subspace Inspector)
+        // 100% visible inside the viewport without scrolling down.
+        var availH = Math.max(460, vh - topOffset - 12); // 6px top + 6px bottom cell padding
+        var dockHeight = Math.max(135, Math.min(185, Math.floor(availH * 0.22)));
+        // Panel vertical chrome: 18px header + 36px controls + 6px padding + 6px border + 30px bottom bar + 8px dock margin = 104px
+        var height = Math.max(280, Math.floor(availH - 104 - dockHeight));
+        return { width: width, height: height, dockHeight: dockHeight };
     };
     this.computeStablePanelSize = function () {
         return self.computeResponsivePanelDimensions().width;
@@ -214,6 +234,7 @@ function GraphFromFeatures() {
     var _initialDims = this.computeResponsivePanelDimensions();
     this.lwidth = _initialDims.width;
     this.lheight = _initialDims.height;
+    this.ldockheight = _initialDims.dockHeight;
     this._resizeTimer = null;
 
     this.isnamedbedited = false;
@@ -3085,6 +3106,11 @@ function GraphFromFeatures() {
         if (el=="mainlayout"){
             gelem('layoutchangenametxtdb').style.display = 'none';
             gelem('iddatasettitle').style.display = 'block';
+            var liveDims = self.computeResponsivePanelDimensions();
+            self.lwidth = liveDims.width;
+            self.lheight = liveDims.height;
+            self.ldockheight = liveDims.dockHeight;
+            self.applyPanelDimensions();
         }
     };
 
@@ -3127,10 +3153,19 @@ function GraphFromFeatures() {
             }
         }
         var bottomDock = gelem("gffBottomDock");
+        var dockMaxH = Math.max(120, (self.ldockheight || 160) - 6);
         if (bottomDock) {
             var dockWidth = (panelTotalWidth * 2) + 8;
             bottomDock.style.width = dockWidth + "px";
             bottomDock.style.maxWidth = dockWidth + "px";
+        }
+        var xaiSummary = gelem("xaiselectedsummary");
+        if (xaiSummary) {
+            xaiSummary.style.maxHeight = dockMaxH + "px";
+        }
+        var pfPanel = gelem("pointfilespanel");
+        if (pfPanel) {
+            pfPanel.style.maxHeight = dockMaxH + "px";
         }
 
         if (gelem("idlayout1bar")) {
@@ -3150,6 +3185,7 @@ function GraphFromFeatures() {
         }
         self.lwidth = dims.width;
         self.lheight = dims.height;
+        self.ldockheight = dims.dockHeight;
         self.applyPanelDimensions();
 
         // Redraw active layouts smoothly to fit the new screen dimensions
