@@ -117,7 +117,7 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
 
     var drag = d3.drag()
         .filter(function () {
-            return !(self.zoomController && self.zoomController.isPanMode()) && !d3.event.button && !d3.event.altKey;
+            return !(self.zoomController && self.zoomController.isPanMode()) && !d3.event.button && !d3.event.altKey && !d3.event.ctrlKey;
         })
         .on("start", function () {
             var srcEvt = d3.event && d3.event.sourceEvent ? d3.event.sourceEvent : null;

@@ -261,6 +261,10 @@ function GraphFromFeatures() {
     // new attributes
     this.unselectedfeids = [];
     this.idinstancelabel = {};
+    this.csvFileLabels = {};
+    this.csvFileColumnName = "";
+    this._spacePanActive = false;
+    this._ctrlPanActive = false;
     this.pointFiles = {};
     this.pointFileList = [];
     this.activePointId = null;
@@ -446,13 +450,63 @@ function GraphFromFeatures() {
         return id;
     };
 
+    this.autoLoadCsvFileLabels = function () {
+        self.csvFileLabels = {};
+        self.csvFileColumnName = "";
+        var names = (self.datagff && Array.isArray(self.datagff.fenames)) ? self.datagff.fenames : [];
+        if (!self.datafileselected || names.length === 0) return;
+        var fileColIdx = -1;
+        var strictRe = /^(file|filename|file_name|filepath|file_path|media_file|image_file|audio_file|doc_file)$/i;
+        var softRe = /^(image|img|audio|sound|video|document|doc|media|path)$/i;
+        for (var i = 0; i < names.length; ++i) {
+            if (strictRe.test(String(names[i] || "").trim())) {
+                fileColIdx = i;
+                break;
+            }
+        }
+        if (fileColIdx < 0) {
+            for (var j = 0; j < names.length; ++j) {
+                if (softRe.test(String(names[j] || "").trim())) {
+                    fileColIdx = j;
+                    break;
+                }
+            }
+        }
+        if (fileColIdx < 0) return;
+        self.csvFileColumnName = String(names[fileColIdx]);
+        var ob = new ServiceData("loading file column");
+        ob.in.argms["type"] = 21;
+        ob.in.argms["file"] = self.datafileselected;
+        ob.in.argms["idinstanceslabels"] = String(fileColIdx);
+        ob.event = function () {
+            if (this.ou && typeof this.ou === "object") {
+                self.csvFileLabels = this.ou;
+                if (self.pointFileList && self.pointFileList.length > 0) {
+                    self.rebindPointFilesToCurrentPoints();
+                }
+            }
+        };
+        ob.start();
+    };
+
     this.getExportInstanceName = function(id){
+        var sid = String(id);
+        if (self.csvFileLabels && self.csvFileLabels[sid] !== undefined && String(self.csvFileLabels[sid]).trim() !== "") {
+            return String(self.csvFileLabels[sid]).replace(/[;\r\n]+/g, "_").trim();
+        }
         var pf = self.getPointFile(id);
         if (pf && pf.name) {
             return String(pf.name).replace(/[;\r\n]+/g, "_").trim();
         }
-        if (self.idinstancelabel && self.idinstancelabel[String(id)] !== undefined && String(self.idinstancelabel[String(id)]).trim() !== "") {
-            return String(self.idinstancelabel[String(id)]).replace(/[;\r\n]+/g, "_").trim();
+        if (self.csvFileColumnName && Array.isArray(self.dataload) && self.dataload.length > 0) {
+            var rIdx = Array.isArray(self.dataloadids) ? self.dataloadids.indexOf(parseInt(id, 10)) : parseInt(id, 10);
+            var row = (rIdx >= 0 && self.dataload[rIdx]) ? self.dataload[rIdx] : self.dataload[parseInt(id, 10)];
+            if (row && row[self.csvFileColumnName] !== undefined && String(row[self.csvFileColumnName]).trim() !== "") {
+                return String(row[self.csvFileColumnName]).replace(/[;\r\n]+/g, "_").trim();
+            }
+        }
+        if (self.idinstancelabel && self.idinstancelabel[sid] !== undefined && String(self.idinstancelabel[sid]).trim() !== "") {
+            return String(self.idinstancelabel[sid]).replace(/[;\r\n]+/g, "_").trim();
         }
         var prefix = sanitizeExportFilename(self.datafileselectedname, "instance");
         return prefix + "_" + id;
@@ -462,24 +516,26 @@ function GraphFromFeatures() {
     this.panModeInstances = false;
 
     this.applyPanModeState = function (which) {
+        var featActive = !!(self.panModeFeatures || self._spacePanActive || self._ctrlPanActive);
+        var instActive = !!(self.panModeInstances || self._spacePanActive || self._ctrlPanActive);
         if (which === "features" || !which) {
             var btnF = gelem("btnPanFeatures");
             if (btnF) {
-                btnF.classList.toggle("btn-primary", !!self.panModeFeatures);
-                btnF.classList.toggle("btn-light", !self.panModeFeatures);
+                btnF.classList.toggle("btn-primary", featActive);
+                btnF.classList.toggle("btn-light", !featActive);
             }
             if (self.layoutfeatures && self.layoutfeatures.zoomController && self.layoutfeatures.zoomController.setPanMode) {
-                self.layoutfeatures.zoomController.setPanMode(self.panModeFeatures);
+                self.layoutfeatures.zoomController.setPanMode(featActive);
             }
         }
         if (which === "instances" || !which) {
             var btnI = gelem("btnPanInstances");
             if (btnI) {
-                btnI.classList.toggle("btn-primary", !!self.panModeInstances);
-                btnI.classList.toggle("btn-light", !self.panModeInstances);
+                btnI.classList.toggle("btn-primary", instActive);
+                btnI.classList.toggle("btn-light", !instActive);
             }
             if (self.layoutinstance && self.layoutinstance.zoomController && self.layoutinstance.zoomController.setPanMode) {
-                self.layoutinstance.zoomController.setPanMode(self.panModeInstances);
+                self.layoutinstance.zoomController.setPanMode(instActive);
             }
         }
     };
@@ -707,6 +763,83 @@ function GraphFromFeatures() {
 
     this._activeModalTextRaw = "";
 
+    this._activeInstanceRow = null;
+
+    this._buildOriginalInstanceStageHtml = function (pointId, displayName, pt, targetNames) {
+        var clsText = pt ? (targetNames[pt.t] !== undefined ? targetNames[pt.t] : pt.t) : "n/a";
+        return "<div style='width:100%; display:flex; flex-direction:column; height:58vh; background:#0f172a; border:1px solid #334155; border-radius:5px; overflow:hidden;'>" +
+            "<div style='display:flex; align-items:center; gap:6px; padding:7px 10px; background:#1e293b; border-bottom:1px solid #334155; flex-wrap:wrap;'>" +
+                "<span style='font-size:11px; font-weight:700; color:#f8fafc;'><i class='fa fa-table' style='color:#38bdf8; margin-right:5px;'></i>Original Instance #" + self.escapeHTML(pointId) + "</span>" +
+                "<span style='font-size:10px; color:#93c5fd;'>" + self.escapeHTML(displayName) + " · Target: " + self.escapeHTML(clsText) + "</span>" +
+                "<input id='pdmFeatureFilter' type='text' placeholder='Filter features...' oninput='GFFOBJ.filterOriginalInstanceFeatures(this.value);' style='margin-left:auto; width:130px; height:22px; font-size:10px; padding:2px 6px; border-radius:3px; border:1px solid #475569; background:#0f172a; color:#f8fafc;'>" +
+                "<button type='button' class='btn btn-outline-info btn-sm' style='padding:1px 6px; font-size:10px;' onclick='gelem(\"pointfilesinput\").click();' title='Attach files'><i class='fa fa-file-upload'></i></button>" +
+                "<button type='button' class='btn btn-outline-warning btn-sm' style='padding:1px 6px; font-size:10px;' onclick='gelem(\"pointmediazipinput\").click();' title='Upload media ZIP'><i class='fa fa-file-archive'></i></button>" +
+            "</div>" +
+            "<div id='pdmOriginalFeatureTable' style='flex:1 1 auto; overflow:auto; padding:8px 10px; text-align:left;'>" +
+                "<div style='color:#94a3b8; font-size:11px; padding:12px;'>Loading original instance values...</div>" +
+            "</div>" +
+        "</div>";
+    };
+
+    this._findFeatureRowForPoint = function (pointId) {
+        if (!Array.isArray(self.dataload) || self.dataload.length === 0) return null;
+        if (Array.isArray(self.dataloadids)) {
+            var pos = self.dataloadids.indexOf(parseInt(pointId, 10));
+            if (pos >= 0 && self.dataload[pos]) return self.dataload[pos];
+        }
+        var idx = parseInt(pointId, 10);
+        if (!isNaN(idx) && self.dataload[idx]) return self.dataload[idx];
+        return null;
+    };
+
+    this._renderOriginalInstanceTable = function (pointId, filterQuery) {
+        var container = gelem("pdmOriginalFeatureTable");
+        if (!container) return;
+        var row = self._findFeatureRowForPoint(pointId);
+        self._activeInstanceRow = row;
+        if (!row) {
+            container.innerHTML = "<div style='color:#94a3b8; font-size:11px; padding:12px;'>Original CSV row is not available for this point.</div>";
+            return;
+        }
+        var selectedNames = {};
+        var selIds = self.getfeatureselected();
+        var feNames = (self.datagff && Array.isArray(self.datagff.fenames)) ? self.datagff.fenames : [];
+        for (var s = 0; s < selIds.length; ++s) {
+            if (feNames[selIds[s]] !== undefined) selectedNames[feNames[selIds[s]]] = true;
+        }
+        var q = String(filterQuery || "").trim().toLowerCase();
+        var cols = Object.keys(row);
+        var html = "<table style='width:100%; border-collapse:collapse; font-size:11px; color:#e2e8f0;'>" +
+            "<thead><tr style='border-bottom:1px solid #334155; color:#94a3b8; text-align:left;'>" +
+            "<th style='padding:4px 6px;'>Feature Name</th><th style='padding:4px 6px; text-align:right;'>Original Value</th></tr></thead><tbody>";
+        var shown = 0;
+        for (var i = 0; i < cols.length; ++i) {
+            var col = cols[i];
+            var val = row[col];
+            if (q && col.toLowerCase().indexOf(q) < 0 && String(val).toLowerCase().indexOf(q) < 0) {
+                continue;
+            }
+            var isSel = !!selectedNames[col];
+            var bg = isSel ? "rgba(56,189,248,0.12)" : (shown % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent");
+            var badge = isSel ? " <span style='background:#0284c7; color:#fff; font-size:9px; padding:0 4px; border-radius:2px; margin-left:4px;'>selected</span>" : "";
+            html += "<tr style='background:" + bg + "; border-bottom:1px solid #1e293b;'>" +
+                "<td style='padding:4px 6px; font-weight:" + (isSel ? "600" : "400") + "; color:" + (isSel ? "#f8fafc" : "#cbd5e1") + ";'>" + self.escapeHTML(col) + badge + "</td>" +
+                "<td style='padding:4px 6px; text-align:right; font-family:monospace; color:#fde68a;'>" + self.escapeHTML(val) + "</td></tr>";
+            shown++;
+        }
+        html += "</tbody></table>";
+        if (shown === 0) {
+            html = "<div style='color:#94a3b8; font-size:11px; padding:12px;'>No matching features found.</div>";
+        }
+        container.innerHTML = html;
+    };
+
+    this.filterOriginalInstanceFeatures = function (query) {
+        if (self.activePointId !== null && self.activePointId !== undefined) {
+            self._renderOriginalInstanceTable(self.activePointId, query);
+        }
+    };
+
     this.getInlineTextForPoint = function (pointId, featureRow) {
         var candidates = [];
         var rawLbl = String(self.getInstanceLabel(pointId) || "").trim();
@@ -903,15 +1036,7 @@ function GraphFromFeatures() {
             if (inlineDoc) {
                 stageHtml = self._buildTextReaderHtml(inlineDoc.label);
             } else {
-            stageHtml = "<div style='text-align:center; padding:24px; max-width:340px;'>" +
-                "<i class='fa fa-photo-video fa-3x' style='color:#64748b; margin-bottom:10px;'></i>" +
-                "<div style='font-size:13px; font-weight:600; margin-bottom:6px;'>No media file attached to Point #" + self.escapeHTML(pointId) + "</div>" +
-                "<div style='font-size:11px; color:#94a3b8; margin-bottom:12px;'>Load a local folder/files or upload a media ZIP (images, audio, video, PDF, text) to inspect data directly on points.</div>" +
-                "<div style='display:flex; gap:6px; justify-content:center; flex-wrap:wrap;'>" +
-                    "<button type='button' class='btn btn-info btn-sm' onclick='gelem(\"pointfilesinput\").click();'><i class='fa fa-file-upload'></i> Files</button>" +
-                    "<button type='button' class='btn btn-secondary btn-sm' onclick='gelem(\"pointfolderinput\").click();'><i class='fa fa-folder-open'></i> Folder</button>" +
-                    "<button type='button' class='btn btn-warning btn-sm' onclick='gelem(\"pointmediazipinput\").click();'><i class='fa fa-file-archive'></i> Upload ZIP</button>" +
-                "</div></div>";
+                stageHtml = self._buildOriginalInstanceStageHtml(pointId, displayName, pt, targetNames);
             }
         }
         stage.innerHTML = stageHtml;
@@ -936,7 +1061,7 @@ function GraphFromFeatures() {
                 neighbors.push({ pt: other, dist: d2 });
             }
             neighbors.sort(function (a, b) { return a.dist - b.dist; });
-            neighbors = neighbors.slice(0, 5);
+            neighbors = neighbors.slice(0, 8);
             sideHtml += "<div class='pdm-section'><h6>Nearest Projected Neighbors</h6>";
             for (var k = 0; k < neighbors.length; ++k) {
                 var nb = neighbors[k].pt;
@@ -1010,6 +1135,24 @@ function GraphFromFeatures() {
             }
         } else if (!pf && typeof inlineDoc !== "undefined" && inlineDoc) {
             self.renderPointTextDocument(inlineDoc.text, inlineDoc.label, "Inline CSV Text");
+        } else if (!pf) {
+            var existingRow = self._findFeatureRowForPoint(pointId);
+            if (existingRow) {
+                self._renderOriginalInstanceTable(pointId, "");
+            } else {
+                self.loadfilecsv(function () {
+                    if (String(self.activePointId) === String(pointId)) {
+                        var loadedRow = self._findFeatureRowForPoint(pointId);
+                        var lateInline = self.getInlineTextForPoint(pointId, loadedRow);
+                        if (lateInline && gelem("pdmMediaStage")) {
+                            gelem("pdmMediaStage").innerHTML = self._buildTextReaderHtml(lateInline.label);
+                            self.renderPointTextDocument(lateInline.text, lateInline.label, "Inline CSV Text");
+                        } else {
+                            self._renderOriginalInstanceTable(pointId, "");
+                        }
+                    }
+                });
+            }
         }
         self.renderPointFilesPanel(
             (self.layoutinstance && self.layoutinstance.selected && self.layoutinstance.selected.length > 0)
@@ -1042,13 +1185,22 @@ function GraphFromFeatures() {
             }
         }
 
+        // Determine if this dataset has explicit filename/label metadata (CSV file column or SELECT ID)
+        var hasExplicitLabels = (self.csvFileLabels && Object.keys(self.csvFileLabels).length > 0)
+            || (self.idinstancelabel && Object.keys(self.idinstancelabel).length > 0);
+
         var matched = 0;
         var unmatchedPoints = [];
         var usedEntries = new Set();
         for (var p = 0; p < points.length; ++p) {
             var pt = points[p];
-            var rawLabel = (self.idinstancelabel && self.idinstancelabel[String(pt.id)] !== undefined)
-                ? String(self.idinstancelabel[String(pt.id)]).trim() : "";
+            var sid = String(pt.id);
+            var rawLabel = "";
+            if (self.idinstancelabel && self.idinstancelabel[sid] !== undefined && String(self.idinstancelabel[sid]).trim() !== "") {
+                rawLabel = String(self.idinstancelabel[sid]).trim();
+            } else if (self.csvFileLabels && self.csvFileLabels[sid] !== undefined && String(self.csvFileLabels[sid]).trim() !== "") {
+                rawLabel = String(self.csvFileLabels[sid]).trim();
+            }
             var lowerLabel = rawLabel.toLowerCase();
             var lowerLabelStem = lowerLabel.replace(/\.[^/.]+$/, "");
             var found = null;
@@ -1056,11 +1208,11 @@ function GraphFromFeatures() {
                 found = byLowerName[lowerLabel];
             } else if (lowerLabelStem && byLowerStem[lowerLabelStem]) {
                 found = byLowerStem[lowerLabelStem];
-            } else if (byNumericId[String(pt.id)]) {
-                found = byNumericId[String(pt.id)];
+            } else if (!hasExplicitLabels && byNumericId[sid]) {
+                found = byNumericId[sid];
             }
             if (found) {
-                self.pointFiles[String(pt.id)] = found;
+                self.pointFiles[sid] = found;
                 usedEntries.add(found);
                 matched++;
             } else {
@@ -1068,12 +1220,14 @@ function GraphFromFeatures() {
             }
         }
 
-        // Fallback: map remaining unmatched points to remaining files in natural sorted order
-        if (unmatchedPoints.length > 0) {
-            var remainingFiles = entries.filter(function (e) { return !usedEntries.has(e); });
-            var count = Math.min(unmatchedPoints.length, remainingFiles.length);
-            for (var k = 0; k < count; ++k) {
-                self.pointFiles[String(unmatchedPoints[k].id)] = remainingFiles[k];
+        // Only use positional natural-order fallback when the dataset has NO explicit filename/ID labels.
+        // If a dataset has a file column (e.g. text_80.csv -> doc_*.txt), mismatched media (e.g. digit_*.png)
+        // must NOT be force-attached to unrelated points.
+        if (!hasExplicitLabels && unmatchedPoints.length > 0) {
+            var remaining = entries.filter(function (e) { return !usedEntries.has(e); });
+            var n = Math.min(unmatchedPoints.length, remaining.length);
+            for (var r = 0; r < n; ++r) {
+                self.pointFiles[String(unmatchedPoints[r].id)] = remaining[r];
                 matched++;
             }
         }
@@ -1135,6 +1289,7 @@ function GraphFromFeatures() {
         var html = "<div style='display:flex; align-items:center; justify-content:space-between; gap:8px; border-bottom:1px solid #cbd5e1; padding-bottom:4px;'>" +
             "<div><strong>Associated Point Files</strong> <span style='color:#475569;'>(" + self.escapeHTML(headerCount) + " &mdash; showing " + Math.min(ids.length, 48) + " of " + ids.length + ")</span></div>" +
             "<div style='display:flex; gap:4px;'>" +
+                "<button type='button' class='btn btn-info btn-sm' style='padding:0 6px; font-size:10px;' onclick='GFFOBJ.captureHtmlPanelScreenshot(\"pointfilespanel\", \"point_files\");' title='Download PNG screenshot of Associated Point Files'><i class='fas fa-image'></i> Screenshot</button>" +
                 "<button type='button' class='btn btn-outline-secondary btn-sm' style='padding:0 6px; font-size:10px;' onclick='gelem(\"pointfilesinput\").click();'>Load Files</button>" +
                 "<button type='button' class='btn btn-outline-secondary btn-sm' style='padding:0 6px; font-size:10px;' onclick='gelem(\"pointfolderinput\").click();'>Load Folder</button>" +
                 (hasLoadedFiles ? "<button type='button' class='btn btn-outline-danger btn-sm' style='padding:0 6px; font-size:10px;' onclick='GFFOBJ.clearPointFiles();'>Clear</button>" : "") +
@@ -1400,7 +1555,10 @@ function GraphFromFeatures() {
             html += "<div style='background:#f7faff; border:1px solid #b8cae6; padding:4px 6px; margin-bottom:4px; border-radius:2px;'>" +
                 "<div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:2px;'>" +
                 "<span><strong style='color:#006064;'>Contrastive &amp; Counterfactual Subspace Inspector</strong> &mdash; <b>" + self.escapeHTML(modeBadge) + "</b> (Purity: " + Math.round((cd.group_a_purity || 1) * 100) + "%)</span>" +
-                "<span style='font-size:9px; color:#4b5d73;'>Tip: Shift+Lasso in projection to brush Group B</span>" +
+                "<span style='display:flex; align-items:center; gap:6px;'>" +
+                    "<span style='font-size:9px; color:#4b5d73;'>Tip: Shift+Lasso in projection to brush Group B</span>" +
+                    "<button type='button' class='btn btn-info btn-sm' style='padding:0 6px; font-size:9px;' onclick='GFFOBJ.captureHtmlPanelScreenshot(\"xaiselectedsummary\", \"contrastive_inspector\");' title='Download PNG screenshot of Contrastive & Counterfactual Subspace Inspector'><i class='fas fa-image'></i> Screenshot</button>" +
+                "</span>" +
                 "</div>";
 
             if (self.perturbationPreview && self.perturbationPreview.status === "ok") {
@@ -2327,6 +2485,7 @@ function GraphFromFeatures() {
             self.target = self.getTargetId();
 
             self.populateInstanceIdDropdown();
+            self.autoLoadCsvFileLabels();
             self.getUnselecteFeatures();
         }
         if ("lastversion" in ds && "versionfeature" in ds && ds["lastversion"] == ds["versionfeature"]) {
@@ -3278,6 +3437,9 @@ function GraphFromFeatures() {
         
         gelem(el).style.display = "block";
 
+        if (gelem("idscreenshotallnav")) {
+            gelem("idscreenshotallnav").style.display = (el == "mainlayout") ? "block" : "none";
+        }
         if (el=="mainlayout"){
             gelem('layoutchangenametxtdb').style.display = 'none';
             gelem('iddatasettitle').style.display = 'block';
@@ -3395,7 +3557,7 @@ function GraphFromFeatures() {
         self.loaddatasets();
         
         self.shifflayoutcontrols("iddatasetlayout");
-        self.padmove(100);
+        // Legacy yellow padmover removed in favor of Hand pan tool and Hold-Space pan
 
         self.applyPanelDimensions();
 
@@ -3419,9 +3581,42 @@ function GraphFromFeatures() {
             if (event.key === 'Escape') {
                 self.closePointDataModal();
             }
+            var tag = event.target && event.target.tagName ? event.target.tagName.toUpperCase() : "";
+            var isTyping = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (event.target && event.target.isContentEditable);
+            var modalOpen = gelem("pointdatamodal") && gelem("pointdatamodal").classList.contains("open");
+            if ((event.key === "Control" || event.ctrlKey) && !isTyping && !modalOpen) {
+                if (!self._ctrlPanActive) {
+                    self._ctrlPanActive = true;
+                    self.applyPanModeState();
+                }
+            }
+            if ((event.code === "Space" || event.key === " ") && !isTyping && !modalOpen) {
+                event.preventDefault();
+                if (!self._spacePanActive) {
+                    self._spacePanActive = true;
+                    self.applyPanModeState();
+                }
+                return;
+            }
             self.setkey(event);
         });
         document.addEventListener('keyup', (event) => {
+            if ((event.key === "Control" || !event.ctrlKey) && self._ctrlPanActive) {
+                self._ctrlPanActive = false;
+                self.applyPanModeState();
+            }
+            if ((event.code === "Space" || event.key === " ") && self._spacePanActive) {
+                self._spacePanActive = false;
+                self.applyPanModeState();
+            }
+            self.hidekey();
+        });
+        window.addEventListener('blur', () => {
+            if (self._ctrlPanActive || self._spacePanActive) {
+                self._ctrlPanActive = false;
+                self._spacePanActive = false;
+                self.applyPanModeState();
+            }
             self.hidekey();
         });
         self.hidekey();
@@ -3468,6 +3663,471 @@ function GraphFromFeatures() {
         }
     };
     
+    this._serializeFittedSvg = function (svgNode, cssContent, pad) {
+        pad = pad !== undefined ? pad : 20;
+        var clone = svgNode.cloneNode(true);
+        clone.setAttribute("version", "1.1");
+        clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+        clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+
+        // Compute tight bounding box across all rendered graphics so nothing is clipped
+        var bbox = null;
+        try {
+            bbox = svgNode.getBBox();
+        } catch (e) {}
+        var rect = svgNode.getBoundingClientRect ? svgNode.getBoundingClientRect() : null;
+        var fallbackW = parseFloat(svgNode.getAttribute("width")) || (rect && rect.width) || 600;
+        var fallbackH = parseFloat(svgNode.getAttribute("height")) || (rect && rect.height) || 600;
+
+        var vx = 0, vy = 0, vw = fallbackW, vh = fallbackH;
+        if (bbox && isFinite(bbox.width) && isFinite(bbox.height) && bbox.width > 1 && bbox.height > 1) {
+            vx = bbox.x - pad;
+            vy = bbox.y - pad;
+            vw = bbox.width + pad * 2;
+            vh = bbox.height + pad * 2;
+        }
+        clone.setAttribute("viewBox", vx + " " + vy + " " + vw + " " + vh);
+        clone.setAttribute("width", Math.ceil(vw));
+        clone.setAttribute("height", Math.ceil(vh));
+
+        // White background rect so PNG/SVG exports are crisp and readable
+        var bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        bg.setAttribute("x", vx);
+        bg.setAttribute("y", vy);
+        bg.setAttribute("width", vw);
+        bg.setAttribute("height", vh);
+        bg.setAttribute("fill", "#ffffff");
+        clone.insertBefore(bg, clone.firstChild);
+
+        var defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        var style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+        style.setAttribute("type", "text/css");
+        style.textContent = cssContent || "";
+        defs.appendChild(style);
+        clone.insertBefore(defs, clone.firstChild);
+
+        var xml = new XMLSerializer().serializeToString(clone);
+        return { xml: xml, width: Math.ceil(vw), height: Math.ceil(vh) };
+    };
+
+    this._svgXmlToImage = function (xml) {
+        return new Promise(function (resolve, reject) {
+            var blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+            var url = URL.createObjectURL(blob);
+            var img = new Image();
+            img.onload = function () {
+                URL.revokeObjectURL(url);
+                resolve(img);
+            };
+            img.onerror = function (err) {
+                URL.revokeObjectURL(url);
+                reject(err);
+            };
+            img.src = url;
+        });
+    };
+
+    this.captureCanvasScreenshot = function (idp, title) {
+        var svgNode = d3.select(idp).select("svg").node();
+        if (!svgNode) {
+            self.mw.alert("Screenshot", "No visualization is currently rendered in this canvas.");
+            return;
+        }
+        $.get("./lib/style.css", function (cssContent) {
+            var fitted = self._serializeFittedSvg(svgNode, cssContent, 24);
+            var scale = 2;
+            var maxDim = 2400;
+            var outW = Math.min(maxDim, Math.max(400, fitted.width * scale));
+            var outH = Math.round(outW * (fitted.height / Math.max(1, fitted.width)));
+            self._svgXmlToImage(fitted.xml).then(function (img) {
+                var canvas = document.createElement("canvas");
+                canvas.width = outW;
+                canvas.height = outH;
+                var ctx = canvas.getContext("2d");
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, outW, outH);
+                ctx.drawImage(img, 0, 0, outW, outH);
+                canvas.toBlob(function (pngBlob) {
+                    if (!pngBlob) return;
+                    var safeName = sanitizeExportFilename(self.datafileselectedname, "gff");
+                    var safeTitle = sanitizeExportFilename(title, "canvas");
+                    var url = URL.createObjectURL(pngBlob);
+                    var a = document.createElement("a");
+                    a.href = url;
+                    a.download = safeName + "_" + safeTitle + ".png";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+                }, "image/png");
+            }).catch(function () {
+                self.mw.alert("Screenshot", "Could not render PNG screenshot; try SVG export instead.");
+            });
+        });
+    };
+
+    this._wrapCanvasText = function (ctx, str, maxWidth) {
+        var words = String(str || "").split(/\s+/);
+        var lines = [];
+        var line = "";
+        for (var i = 0; i < words.length; ++i) {
+            var test = line ? (line + " " + words[i]) : words[i];
+            if (ctx.measureText(test).width > maxWidth && line) {
+                lines.push(line);
+                line = words[i];
+            } else {
+                line = test;
+            }
+        }
+        if (line) lines.push(line);
+        return lines.length ? lines : [""];
+    };
+
+    this._renderHtmlPanelToImage = function (panelEl, cssContent, targetWidth) {
+        return new Promise(function (resolve) {
+            var w = Math.max(820, targetWidth || panelEl.clientWidth || 960);
+            var pad = 16;
+
+            // Specialized crisp Canvas 2D renderer for Associated Point Files grid
+            if (panelEl.id === "pointfilespanel") {
+                var cards = panelEl.querySelectorAll(".point-file-card");
+                var cardW = 148;
+                var cardH = 112;
+                var gap = 10;
+                var cols = Math.max(2, Math.floor((w - pad * 2 + gap) / (cardW + gap)));
+                var shown = Math.min(cards.length, 48);
+                var rows = Math.max(1, Math.ceil(shown / cols));
+                var headerH = 34;
+                var totalH = pad * 2 + headerH + rows * (cardH + gap);
+
+                var c = document.createElement("canvas");
+                c.width = w;
+                c.height = totalH;
+                var ctx = c.getContext("2d");
+                ctx.fillStyle = "#f8fafc";
+                ctx.fillRect(0, 0, w, totalH);
+                ctx.strokeStyle = "#cbd5e1";
+                ctx.strokeRect(1, 1, w - 2, totalH - 2);
+
+                ctx.fillStyle = "#0f172a";
+                ctx.font = "bold 14px Sans-serif";
+                ctx.fillText("Associated Point Files (" + shown + " items)", pad, pad + 18);
+
+                for (var idx = 0; idx < shown; ++idx) {
+                    var card = cards[idx];
+                    var col = idx % cols;
+                    var row = Math.floor(idx / cols);
+                    var x = pad + col * (cardW + gap);
+                    var y = pad + headerH + row * (cardH + gap);
+
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(x, y, cardW, cardH);
+                    ctx.strokeStyle = card.classList.contains("active") ? "#029ff1" : "#cbd5e1";
+                    ctx.lineWidth = card.classList.contains("active") ? 2 : 1;
+                    ctx.strokeRect(x, y, cardW, cardH);
+
+                    var imgEl = card.querySelector("img");
+                    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
+                        try {
+                            ctx.drawImage(imgEl, x + 6, y + 6, cardW - 12, 66);
+                        } catch (e) {
+                            ctx.fillStyle = "#e2e8f0";
+                            ctx.fillRect(x + 6, y + 6, cardW - 12, 66);
+                        }
+                    } else {
+                        ctx.fillStyle = "#e2e8f0";
+                        ctx.fillRect(x + 6, y + 6, cardW - 12, 66);
+                        ctx.fillStyle = "#475569";
+                        ctx.font = "bold 12px Sans-serif";
+                        var iconLabel = card.querySelector(".fa-volume-up") ? "AUDIO"
+                            : (card.querySelector(".fa-video") ? "VIDEO"
+                            : (card.querySelector(".fa-file-alt") ? "TEXT" : "DATA"));
+                        ctx.fillText(iconLabel, x + 48, y + 44);
+                    }
+
+                    var nameEl = card.querySelector(".point-file-name");
+                    var metaEl = card.querySelector(".point-file-meta");
+                    ctx.fillStyle = "#1e293b";
+                    ctx.font = "bold 11px Sans-serif";
+                    var fname = (nameEl ? nameEl.textContent : "").trim();
+                    if (fname.length > 20) fname = fname.slice(0, 19) + "...";
+                    ctx.fillText(fname, x + 6, y + 88);
+
+                    ctx.fillStyle = "#64748b";
+                    ctx.font = "10px Sans-serif";
+                    var fmeta = (metaEl ? metaEl.textContent : "").trim();
+                    if (fmeta.length > 22) fmeta = fmeta.slice(0, 21) + "...";
+                    ctx.fillText(fmeta, x + 6, y + 103);
+                }
+                resolve({ img: c, w: w, h: totalH });
+                return;
+            }
+
+            // Pure Canvas 2D renderer for Contrastive & Counterfactual Subspace Inspector / XAI Summary
+            var tmpC = document.createElement("canvas");
+            var tmpCtx = tmpC.getContext("2d");
+            tmpCtx.font = "12px Sans-serif";
+            var rawLines = String(panelEl.innerText || "").split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+            // Strip button label noise like "Screenshot"
+            rawLines = rawLines.filter(function (ln) { return ln !== "Screenshot"; });
+
+            var wrapped = [];
+            for (var li = 0; li < rawLines.length; ++li) {
+                var ln = rawLines[li];
+                var isHeading = li === 0 || /Contrastive|Projection Quality|Local Contrastive|Counterfactual|Top Selected/i.test(ln);
+                tmpCtx.font = isHeading ? "bold 13px Sans-serif" : "12px Sans-serif";
+                var parts = self._wrapCanvasText(tmpCtx, ln, w - pad * 2);
+                for (var pi = 0; pi < parts.length; ++pi) {
+                    wrapped.push({ text: parts[pi], bold: isHeading && pi === 0 });
+                }
+            }
+
+            // If structured contrastive drivers exist, render visual Cohen's d bars too
+            var drivers = (self.contrastiveData && self.contrastiveData.status === "ok" && Array.isArray(self.contrastiveData.drivers))
+                ? self.contrastiveData.drivers.slice(0, 8) : [];
+            var lineH = 19;
+            var barsH = drivers.length > 0 ? (32 + drivers.length * 22) : 0;
+            var textH = Math.max(40, wrapped.length * lineH);
+            var totalH = pad * 2 + barsH + textH + 12;
+
+            var c2 = document.createElement("canvas");
+            c2.width = w;
+            c2.height = totalH;
+            var ctx2 = c2.getContext("2d");
+            ctx2.fillStyle = "#eef4ff";
+            ctx2.fillRect(0, 0, w, totalH);
+            ctx2.strokeStyle = "#b8cae6";
+            ctx2.strokeRect(1, 1, w - 2, totalH - 2);
+
+            var curY = pad + 14;
+            if (drivers.length > 0) {
+                ctx2.fillStyle = "#006064";
+                ctx2.font = "bold 14px Sans-serif";
+                var modeLbl = self.contrastiveData.mode === "group_vs_group" ? "Group A vs Group B" : "Group A vs Rest";
+                ctx2.fillText("Contrastive & Counterfactual Subspace Inspector — " + modeLbl + " (Top Drivers)", pad, curY);
+                curY += 18;
+                var maxAbsD = 0.01;
+                for (var d1 = 0; d1 < drivers.length; ++d1) {
+                    maxAbsD = Math.max(maxAbsD, Math.abs(Number(drivers[d1].cohens_d || 0)));
+                }
+                var labelW = 200;
+                var barMaxW = Math.max(180, w - pad * 2 - labelW - 140);
+                for (var d2 = 0; d2 < drivers.length; ++d2) {
+                    var dr = drivers[d2];
+                    var dVal = Number(dr.cohens_d || 0);
+                    var frac = Math.min(1, Math.abs(dVal) / maxAbsD);
+                    ctx2.fillStyle = "#1e293b";
+                    ctx2.font = "bold 11px Sans-serif";
+                    var dName = String(dr.name || dr.feature || ("f" + d2));
+                    if (dName.length > 26) dName = dName.slice(0, 25) + "...";
+                    ctx2.fillText(dName, pad, curY + 12);
+
+                    ctx2.fillStyle = "#dbeafe";
+                    ctx2.fillRect(pad + labelW, curY + 2, barMaxW, 13);
+                    ctx2.fillStyle = dVal >= 0 ? "#0284c7" : "#dc2626";
+                    ctx2.fillRect(pad + labelW, curY + 2, Math.max(3, Math.round(barMaxW * frac)), 13);
+
+                    ctx2.fillStyle = "#334155";
+                    ctx2.font = "11px monospace";
+                    ctx2.fillText("d=" + dVal.toFixed(2) + (dr.fdr !== undefined ? ("  q=" + Number(dr.fdr).toExponential(1)) : ""), pad + labelW + barMaxW + 8, curY + 12);
+                    curY += 22;
+                }
+                curY += 10;
+            }
+
+            for (var wi = 0; wi < wrapped.length; ++wi) {
+                ctx2.fillStyle = wrapped[wi].bold ? "#0f172a" : "#334155";
+                ctx2.font = wrapped[wi].bold ? "bold 13px Sans-serif" : "12px Sans-serif";
+                ctx2.fillText(wrapped[wi].text, pad, curY);
+                curY += lineH;
+            }
+
+            resolve({ img: c2, w: w, h: totalH });
+        });
+    };
+
+    this.captureHtmlPanelScreenshot = function (panelId, title) {
+        var el = gelem(panelId);
+        if (!el || el.style.display === "none" || !el.innerHTML.trim()) {
+            self.mw.alert("Screenshot", "This panel is currently empty or hidden.");
+            return;
+        }
+        var targetW = Math.max(900, el.clientWidth || 1000);
+        self._renderHtmlPanelToImage(el, "", targetW).then(function (res) {
+            res.img.toBlob(function (pngBlob) {
+                if (!pngBlob) return;
+                var safeName = sanitizeExportFilename(self.datafileselectedname, "gff");
+                var safeTitle = sanitizeExportFilename(title, panelId);
+                var url = URL.createObjectURL(pngBlob);
+                var a = document.createElement("a");
+                a.href = url;
+                a.download = safeName + "_" + safeTitle + ".png";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+            }, "image/png");
+        }).catch(function (err) {
+            console.error("Panel screenshot error:", err);
+            self.mw.alert("Screenshot", "Could not render PNG screenshot for this panel.");
+        });
+    };
+
+    this.captureAllCanvasesScreenshot = function () {
+        var specs = [
+            { sel: "#vis", title: "Feature Graph", sub: (gelem("topleft1") ? gelem("topleft1").textContent : "") + " " + (gelem("topright1") ? gelem("topright1").textContent : "") },
+            { sel: "#visp", title: "Instance Projection", sub: (gelem("topleft2") ? gelem("topleft2").textContent : "") + " " + (gelem("topright2") ? gelem("topright2").textContent : "") },
+            { sel: "#featselectfeaturecontent", title: "Selected Features", sub: gelem("featselectfeaturetitle") ? gelem("featselectfeaturetitle").textContent : "", requireVisibleId: "featselectfeature" },
+            { sel: "#featselectinstancecontent", title: "Selected Instances", sub: gelem("featselectinstancetitle") ? gelem("featselectinstancetitle").textContent : "", requireVisibleId: "featselectinstance" }
+        ];
+        var active = [];
+        for (var i = 0; i < specs.length; ++i) {
+            var sp = specs[i];
+            if (sp.requireVisibleId) {
+                var host = gelem(sp.requireVisibleId);
+                if (!host || host.style.display === "none") continue;
+            }
+            var node = d3.select(sp.sel).select("svg").node();
+            if (node) {
+                active.push({ spec: sp, node: node });
+            }
+        }
+        if (active.length === 0) {
+            self.mw.alert("Screenshot All", "No active visualizations to capture yet.");
+            return;
+        }
+        $.get("./lib/style.css", function (cssContent) {
+            var cols = active.length === 1 ? 1 : 2;
+            var cellW = 1000;
+            var cellH = 820;
+            var headerH = 54;
+            var cellHeaderH = 38;
+            var gap = 20;
+            var pad = 20;
+            var fullDockW = cols * cellW + (cols - 1) * gap;
+
+            var jobs = active.map(function (item) {
+                var fitted = self._serializeFittedSvg(item.node, cssContent, 24);
+                return self._svgXmlToImage(fitted.xml).then(function (img) {
+                    return { kind: "svg", spec: item.spec, img: img, w: fitted.width, h: fitted.height };
+                });
+            });
+
+            var dockSpecs = [
+                { id: "xaiselectedsummary", title: "Contrastive & Counterfactual Subspace Inspector / XAI Summary" },
+                { id: "pointfilespanel", title: "Associated Point Files Viewer" }
+            ];
+            var dockJobs = [];
+            for (var di = 0; di < dockSpecs.length; ++di) {
+                (function (dsp) {
+                    var el = gelem(dsp.id);
+                    if (el && el.style.display !== "none" && el.innerHTML.trim() !== "") {
+                        dockJobs.push(
+                            self._renderHtmlPanelToImage(el, cssContent, fullDockW - 24).then(function (res) {
+                                return { kind: "dock", title: dsp.title, img: res.img, w: res.w, h: res.h };
+                            }).catch(function () { return null; })
+                        );
+                    }
+                })(dockSpecs[di]);
+            }
+
+            Promise.all([Promise.all(jobs), Promise.all(dockJobs)]).then(function (both) {
+                var rendered = both[0];
+                var docks = both[1].filter(Boolean);
+                var rows = Math.ceil(rendered.length / cols);
+                var totalW = pad * 2 + fullDockW;
+                var gridBottomY = pad + headerH + rows * (cellH + cellHeaderH) + Math.max(0, rows - 1) * gap;
+                var dockExtraH = 0;
+                for (var dk = 0; dk < docks.length; ++dk) {
+                    dockExtraH += gap + cellHeaderH + docks[dk].h + 24;
+                }
+                var totalH = gridBottomY + dockExtraH + pad;
+
+                var canvas = document.createElement("canvas");
+                canvas.width = totalW;
+                canvas.height = totalH;
+                var ctx = canvas.getContext("2d");
+                ctx.fillStyle = "#f1f5f9";
+                ctx.fillRect(0, 0, totalW, totalH);
+
+                // Top banner
+                ctx.fillStyle = "#120c36";
+                ctx.fillRect(0, 0, totalW, headerH);
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 20px Sans-serif";
+                var dsLabel = self.datafileselectedname || "GFF+ Workspace";
+                ctx.fillText("GFF+ Snapshot — " + dsLabel, pad, 34);
+
+                for (var idx = 0; idx < rendered.length; ++idx) {
+                    var r = rendered[idx];
+                    var colIdx = idx % cols;
+                    var rowIdx = Math.floor(idx / cols);
+                    var x0 = pad + colIdx * (cellW + gap);
+                    var y0 = pad + headerH + rowIdx * (cellH + cellHeaderH + gap);
+
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(x0, y0, cellW, cellH + cellHeaderH);
+                    ctx.strokeStyle = "#cbd5e1";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(x0, y0, cellW, cellH + cellHeaderH);
+
+                    ctx.fillStyle = "#1e293b";
+                    ctx.font = "bold 15px Sans-serif";
+                    ctx.fillText(r.spec.title, x0 + 12, y0 + 24);
+                    if (r.spec.sub && r.spec.sub.trim()) {
+                        ctx.fillStyle = "#475569";
+                        ctx.font = "12px Sans-serif";
+                        ctx.fillText(r.spec.sub.trim().slice(0, 85), x0 + 210, y0 + 24);
+                    }
+
+                    // Preserve aspect ratio and fit 100% inside the cell
+                    var innerPad = 14;
+                    var availW = cellW - innerPad * 2;
+                    var availH = cellH - innerPad * 2;
+                    var ratio = Math.min(availW / Math.max(1, r.w), availH / Math.max(1, r.h));
+                    var drawW = r.w * ratio;
+                    var drawH = r.h * ratio;
+                    var dx = x0 + innerPad + (availW - drawW) / 2;
+                    var dy = y0 + cellHeaderH + innerPad + (availH - drawH) / 2;
+                    ctx.drawImage(r.img, dx, dy, drawW, drawH);
+                }
+
+                // Render visible bottom dock panels (Contrastive Inspector & Associated Point Files)
+                var curY = gridBottomY + gap;
+                for (var dIdx = 0; dIdx < docks.length; ++dIdx) {
+                    var dkObj = docks[dIdx];
+                    var boxH = cellHeaderH + dkObj.h + 24;
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillRect(pad, curY, fullDockW, boxH);
+                    ctx.strokeStyle = "#cbd5e1";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(pad, curY, fullDockW, boxH);
+
+                    ctx.fillStyle = "#1e293b";
+                    ctx.font = "bold 15px Sans-serif";
+                    ctx.fillText(dkObj.title, pad + 12, curY + 24);
+                    ctx.drawImage(dkObj.img, pad + 12, curY + cellHeaderH + 8, dkObj.w, dkObj.h);
+                    curY += boxH + gap;
+                }
+
+                canvas.toBlob(function (pngBlob) {
+                    if (!pngBlob) return;
+                    var safeName = sanitizeExportFilename(self.datafileselectedname, "gff");
+                    var url = URL.createObjectURL(pngBlob);
+                    var a = document.createElement("a");
+                    a.href = url;
+                    a.download = safeName + "_all_canvases.png";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+                }, "image/png");
+            }).catch(function () {
+                self.mw.alert("Screenshot All", "Could not generate combined PNG screenshot.");
+            });
+        });
+    };
+
     this.save_as_svg = function (idp, title) {
         var svgNode = d3.select(idp).select("svg").node();
         if (!svgNode) {

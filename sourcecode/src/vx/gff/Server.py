@@ -74,6 +74,7 @@ class Server(tornado.web.Application):
         from vx.gff.Upload import UploadHandler, MediaUploadHandler
         handlers = [
             (r"/", Index),
+            (r"/about", About),
             (r"/login", Login),
             (r"/logout", Logout),
             (r"/query", Query),

@@ -386,7 +386,11 @@ class TestLiveServerEndToEnd(AsyncHTTPTestCase):
     def test_full_end_to_end_user_workflow(self):
         xsrf = self._login()
 
-        # 1. GET / renders main page with all critical UI containers
+        # 1. GET / renders main page with all critical UI containers, and GET /about opens User Guide
+        r_about = self.fetch("/about", method="GET")
+        self.assertEqual(r_about.code, 200)
+        self.assertIn("https://github.com/HaseebYounis1/GFFPlus", r_about.body.decode("utf-8"))
+
         r_idx = self.fetch("/", method="GET", headers={"Cookie": self._cookie_header()})
         self.assertEqual(r_idx.code, 200)
         html = r_idx.body.decode("utf-8")

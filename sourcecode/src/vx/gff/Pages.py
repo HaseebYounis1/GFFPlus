@@ -61,6 +61,11 @@ class Logout(BaseHandler):
         self.redirect("./")
 
 
+class About(BaseHandler):
+    def get(self):
+        self.render("about.html")
+
+
 
 class Index(BaseHandler):
 

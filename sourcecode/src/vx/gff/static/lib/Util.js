@@ -92,7 +92,7 @@ function createConstantZoom(svgSelection, onTransform, options) {
             if (d3.event.type === "wheel") {
                 return true;
             }
-            if (panMode) {
+            if (panMode || !!d3.event.ctrlKey) {
                 return !d3.event.button;
             }
             if (hasLassoDrag) {

@@ -100,7 +100,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     var closePath;
     self.drag = d3.drag()
         .filter(function () {
-            return !(self.zoomController && self.zoomController.isPanMode()) && !d3.event.button && !d3.event.altKey;
+            return !(self.zoomController && self.zoomController.isPanMode()) && !d3.event.button && !d3.event.altKey && !d3.event.ctrlKey;
         })
         .on("start", function () {
             self.stopforce();

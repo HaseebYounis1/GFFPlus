@@ -131,7 +131,22 @@
                         </div>
                     </div>
                     <div class="navbar-collapse collapse w-100 order-3 dual-collapse2">
-                        <ul class="navbar-nav ml-auto">
+                        <ul class="navbar-nav ml-auto" style="align-items: center; gap: 4px;">
+                            <li class="nav-item" id="idscreenshotallnav" style="display: none;">
+                                <a class="nav-link" href="#" style="color: #fde047; font-weight: 600;"
+                                    onclick="event.preventDefault(); GFFOBJ.captureAllCanvasesScreenshot();"
+                                    title="Capture full-fit PNG screenshot of all visible canvases"
+                                >
+                                    <i class="fas fa-camera-retro"></i> Screenshot All
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="./about" target="_blank" rel="noopener" style="color: #93c5fd;"
+                                    title="Open User Guide & GitHub Repository in a new tab"
+                                >
+                                    <i class="fa fa-info-circle"></i> About
+                                </a>
+                            </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="#" style="color: #fff"><i class="fa fa-user-circle"></i> {{email}}</a>
                             </li>
@@ -183,12 +198,8 @@
                                 <i class="fa fa-key fa-lg"></i>        
                             </a>
                         </li>
-                        <li class="nav-item" title="About"
-                            onclick="
-                                GFFOBJ.shifflayoutcontrols('idaboutlayout');
-                            "
-                        >
-                            <a class="nav-link" style="color: #ccc" href="#">
+                        <li class="nav-item" title="About & User Guide (opens in new tab)">
+                            <a class="nav-link" style="color: #ccc" href="./about" target="_blank" rel="noopener">
                                 <i class="fa fa-question fa-lg"></i>
                             </a>
                         </li>
@@ -352,50 +363,69 @@
 
 
 
-                <!-- from to about -->
+                <!-- About & User Guide -->
                 <div id="idaboutlayout" style="display: none;">
-                     <div style="width: 621px; margin: 0 auto; color: #fff;">
-                        <h4>About</h4>
-                        <div style="background-color: #c5cbdb;">
-                            <div style="padding: 3px;">
-                                <div style="text-align: center;">
-                                    <!-- autoplay -->
-                                    <video loop width="605" height="340" controls poster="https://ivarvb.github.io/GFF/img/init.png">
-                                        <source src="http://ivarvb.github.io/video/AbstractVideo_Graph_HiRes.mp4" type="video/mp4">
-                                    </video>
+                     <div style="max-width: 860px; margin: 12px auto; color: #0f172a; background: #ffffff; border-radius: 6px; box-shadow: 0 8px 28px rgba(0,0,0,0.28); overflow: hidden;">
+                        <div style="background: #120c36; color: #fff; padding: 12px 18px; display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <h5 style="margin: 0; font-weight: 700;"><i class="fa fa-project-diagram" style="color: #38bdf8; margin-right: 6px;"></i>Graphs From Features (GFF+) &mdash; User Guide &amp; About</h5>
+                                <div style="font-size: 11px; color: #cbd5e1; margin-top: 2px;">Interactive Feature Graph, Subspace Projection, Explainability (XAI), and Multimodal Point Explorer</div>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <a class="btn btn-info btn-sm" href="https://github.com/HaseebYounis1/GFFPlus" target="_blank" rel="noopener">
+                                    <i class="fab fa-github"></i> GitHub Repository
+                                </a>
+                                <a class="btn btn-success btn-sm" href="https://doi.org/10.3390/a13110302" target="_blank" rel="noopener">
+                                    <i class="fa fa-book"></i> Original Paper (DOI)
+                                </a>
+                                <button type="button" class="btn btn-outline-light btn-sm" onclick="GFFOBJ.shifflayoutcontrols(GFFOBJ.datafileselected ? 'mainlayout' : 'iddatasetlayout');">
+                                    <i class="fa fa-arrow-left"></i> Back
+                                </button>
+                            </div>
+                        </div>
+                        <div style="padding: 16px 20px; font-size: 12px; line-height: 1.55; max-height: 75vh; overflow: auto;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px;">
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px 12px;">
+                                    <h6 style="margin: 0 0 6px 0; color: #1e3a8a; font-weight: 700;">1. Upload &amp; Target Variable</h6>
+                                    <ul style="margin: 0; padding-left: 16px;">
+                                        <li>Upload any <b>.csv</b> or <b>.zip</b> dataset from the Datasets screen.</li>
+                                        <li>Choose <b>any column</b> (class label, health condition, clustering ID, or numeric target) in the <b>TARGET</b> dropdown, then press <i class="fa fa-play"></i> on either panel.</li>
+                                    </ul>
                                 </div>
-
-                                <table style="width: 100%;">
-                                    <tr>
-                                        <td>
-                                            <a	class="btn btn-primary btn-sm"
-                                                onclick="
-                                                    window.open(
-                                                    'https://ivarvb.github.io/GFF/',
-                                                    '_blank'
-                                                    );
-                                                "
-                                            >
-                                                <!-- <i class="fa fa-github"></i>  -->
-                                                Source Code Download
-                                                <!-- SOURCE CODE DOWNLOAD -->
-                                            </a>
-                                            <!-- <span style="font-size: 11px;">
-                                                (Updated on 25/01/2021)
-                                            </span>     -->
-                                        </td>
-                                        <td style="text-align: right; vertical-align: middle;">
-                                            <a	class="btn btn-success btn-sm"
-                                                href="https://doi.org/10.3390/a13110302"
-                                            >
-                                                <!-- <i class="fa fa-file-pdf-o"></i>  -->
-                                                PDF (Open Access)
-                                                <!-- <i class="fa fa-open-access"></i>  -->
-                                                
-                                            </a>                            
-                                        </td>
-                                    </tr>
-                                </table>
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px 12px;">
+                                    <h6 style="margin: 0 0 6px 0; color: #1e3a8a; font-weight: 700;">2. Feature Selection &amp; Layouts</h6>
+                                    <ul style="margin: 0; padding-left: 16px;">
+                                        <li>Drag the <b>left color threshold bar</b> or the <b>XAI threshold slider</b> for live interactive feature selection.</li>
+                                        <li>Lasso-select nodes on the graph (<b>Ctrl+drag</b> adds, <b>Shift+drag</b> removes) or use the blue <b>Filter</b> dropdown.</li>
+                                    </ul>
+                                </div>
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px 12px;">
+                                    <h6 style="margin: 0 0 6px 0; color: #1e3a8a; font-weight: 700;">3. Pan, Zoom &amp; Shortcuts</h6>
+                                    <ul style="margin: 0; padding-left: 16px;">
+                                        <li>Click the <b>Hand</b> button (<i class="fa fa-hand-paper"></i>) or <b>hold Spacebar</b> while dragging to pan either canvas smoothly.</li>
+                                        <li>Use mouse wheel or the <b>+ / &minus; / Reset</b> buttons for constant-step zooming.</li>
+                                    </ul>
+                                </div>
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px 12px;">
+                                    <h6 style="margin: 0 0 6px 0; color: #1e3a8a; font-weight: 700;">4. Point Data Explorer (Images, Audio, Video, Text)</h6>
+                                    <ul style="margin: 0; padding-left: 16px;">
+                                        <li>Click any projected point to inspect its attached image, audio waveform, video, PDF, or searchable text document.</li>
+                                        <li>If no media is attached, GFF+ displays the <b>original instance's full feature names &amp; values</b> plus its nearest neighbors.</li>
+                                    </ul>
+                                </div>
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px 12px;">
+                                    <h6 style="margin: 0 0 6px 0; color: #1e3a8a; font-weight: 700;">5. Contrastive &amp; XAI Analysis</h6>
+                                    <ul style="margin: 0; padding-left: 16px;">
+                                        <li>Lasso Group A (normal drag) and optionally Group B (<b>Shift+drag</b>) on the projection to inspect local contrastive drivers in the bottom dock.</li>
+                                    </ul>
+                                </div>
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; padding: 10px 12px;">
+                                    <h6 style="margin: 0 0 6px 0; color: #1e3a8a; font-weight: 700;">6. Exports &amp; Screenshots</h6>
+                                    <ul style="margin: 0; padding-left: 16px;">
+                                        <li>Export VisPipeline-compatible <b>.prj</b> (preserving CSV filenames with extensions) and <b>.data</b> files.</li>
+                                        <li>Use the <b>Screenshot</b> button (<i class="fas fa-camera"></i>) on any canvas or <b>Screenshot All</b> in the top bar for full-fit PNG captures.</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -525,16 +555,6 @@
                                             <div class="gff-canvas-center">
                                                 <div id="idlayout1" style="position:relative;">
                                                     <div id="vis"></div>
-                                                    <div id="idpadmover"
-                                                        style="
-                                                            position:absolute;
-                                                            bottom:25px;
-                                                            right: 0;
-                                                            border: 1px solid #333;
-                                                            z-index: 2;
-                                                            opacity: 0.8;
-                                                        "
-                                                    ></div>
 
                                                     <div class="gff-overlay-bar" style="top: 0;">
                                                         <span id="topleft1">&nbsp;</span>
@@ -604,22 +624,32 @@
                                                                         right: 0;
                                                                         margin-right: 24px;
                                                                         cursor: pointer;
+                                                                        display: flex;
+                                                                        gap: 3px;
                                                                     "
-                                                                    title="Export as svg image"
                                                                 >
+                                                                    <a href="#" class="btn btn-info btn-sm"
+                                                                        onclick="
+                                                                            event.preventDefault();
+                                                                            event.stopPropagation();
+                                                                            GFFOBJ.captureCanvasScreenshot('#featselectfeaturecontent','features_selected');
+                                                                        "
+                                                                        title="Download full-fit PNG screenshot"
+                                                                        style="padding: 1px 4px;"
+                                                                    >
+                                                                        <i class="fas fa-image fa-sm" style="padding: 0;margin: 0;"></i>
+                                                                    </a>
                                                                     <a href="#" class="btn btn-warning btn-sm"
                                                                         onclick="
                                                                             event.preventDefault();
                                                                             event.stopPropagation();
                                                                             GFFOBJ.save_as_svg('#featselectfeaturecontent','features');
                                                                         "
-                                                                        title="Export as svg image"
-                                                                        style="width: 100%;
-                                                                            padding: 1px;
-                                                                        "
+                                                                        title="Export as SVG image"
+                                                                        style="padding: 1px 4px;"
                                                                     >
-                                                                        <i class="fas fa-camera fa-lg"
-                                                                            style="padding: 0;margin: 0; width: 100%;"
+                                                                        <i class="fas fa-camera fa-sm"
+                                                                            style="padding: 0;margin: 0;"
                                                                         ></i>
                                                                     </a>
                                                                 </div>
@@ -836,11 +866,29 @@
 
                                                                     <div style="height: 3px;"></div>
 
+                                                                    <a href="#" class="btn btn-info btn-sm"
+                                                                        onclick="
+                                                                            event.preventDefault();
+                                                                            GFFOBJ.captureCanvasScreenshot('#vis','graph');
+                                                                        "
+                                                                        title="Download full-fit PNG screenshot"
+                                                                        style="width: 100%;
+                                                                            padding: 1px;
+                                                                        "
+                                                                    >
+                                                                        <i class="fas fa-image fa-lg"
+                                                                            style="padding: 0;margin: 0; width: 100%;"
+                                                                        ></i>
+                                                                    </a>
+
+                                                                    <div style="height: 2px"></div>
+
                                                                     <a href="#" class="btn btn-warning btn-sm"
                                                                         onclick="
+                                                                            event.preventDefault();
                                                                             GFFOBJ.save_as_svg('#vis','graph');
                                                                         "
-                                                                        title="Export as svg image"
+                                                                        title="Export as SVG image"
                                                                         style="width: 100%;
                                                                             padding: 1px;
                                                                         "
@@ -940,29 +988,6 @@
                                                             </tr>
                                                             <tr>
                                                                 <td style="vertical-align: bottom">
-
-                                                                    <!--https://mdbootstrap.com/docs/jquery/content/icons-list/-->
-                                                                    <a href="#" class="btn btn-warning  "
-                                                                        onclick="                                                                                
-                                                                            if (gelem('idpadmover').style.display=='none'){
-                                                                                gelem('idpadmover').style.display = 'block';
-
-                                                                            }
-                                                                            else{
-                                                                                gelem('idpadmover').style.display = 'none';
-
-                                                                            }
-                                                                            
-                                                                        "
-                                                                        title=""
-                                                                        style="width: 100%;
-                                                                        padding: 1px;
-                                                                        /*padding-bottom: 0px;*/
-                                                                        "
-                                                                    >
-                                                                        <i class="far fa-square fa-lg"></i>
-                                                                    </a>
-                                                                    <div style="height: 3px"></div>
                                                                     <div style="background-color: #000; padding: 1px;"
                                                                         title="Change colors (edges)"
                                                                         onclick="
@@ -1175,22 +1200,32 @@
                                                                         right: 0;
                                                                         margin-right: 24px;
                                                                         cursor: pointer;
+                                                                        display: flex;
+                                                                        gap: 3px;
                                                                     "
-                                                                    title="Export as svg image"
                                                                 >
+                                                                    <a href="#" class="btn btn-info btn-sm"
+                                                                        onclick="
+                                                                            event.preventDefault();
+                                                                            event.stopPropagation();
+                                                                            GFFOBJ.captureCanvasScreenshot('#featselectinstancecontent','instances_selected');
+                                                                        "
+                                                                        title="Download full-fit PNG screenshot"
+                                                                        style="padding: 1px 4px;"
+                                                                    >
+                                                                        <i class="fas fa-image fa-sm" style="padding: 0;margin: 0;"></i>
+                                                                    </a>
                                                                     <a href="#" class="btn btn-warning btn-sm"
                                                                         onclick="
                                                                             event.preventDefault();
                                                                             event.stopPropagation();
                                                                             GFFOBJ.save_as_svg('#featselectinstancecontent','instance');
                                                                         "
-                                                                        title="Export as svg image"
-                                                                        style="width: 100%;
-                                                                            padding: 1px;
-                                                                        "
+                                                                        title="Export as SVG image"
+                                                                        style="padding: 1px 4px;"
                                                                     >
-                                                                        <i class="fas fa-camera fa-lg"
-                                                                            style="padding: 0;margin: 0; width: 100%;"
+                                                                        <i class="fas fa-camera fa-sm"
+                                                                            style="padding: 0;margin: 0;"
                                                                         ></i>
                                                                     </a>
                                                                 </div>
@@ -1276,11 +1311,29 @@
 
                                                                     <!-- <div style="height: 5px"></div> -->
 
+                                                                    <a href="#" class="btn btn-info btn-sm"
+                                                                        onclick="
+                                                                            event.preventDefault();
+                                                                            GFFOBJ.captureCanvasScreenshot('#visp','projection');
+                                                                        "
+                                                                        title="Download full-fit PNG screenshot"
+                                                                        style="width: 100%;
+                                                                            padding: 1px;
+                                                                        "
+                                                                    >
+                                                                        <i class="fas fa-image fa-lg"
+                                                                            style="padding: 0;margin: 0; width: 100%;"
+                                                                        ></i>
+                                                                    </a>
+
+                                                                    <div style="height: 2px"></div>
+
                                                                     <a href="#" class="btn btn-warning btn-sm"
                                                                         onclick="
+                                                                            event.preventDefault();
                                                                             GFFOBJ.save_as_svg('#visp','instance');
                                                                         "
-                                                                        title="Export as svg image"
+                                                                        title="Export as SVG image"
                                                                         style="width: 100%;
                                                                             padding: 1px;
                                                                         "

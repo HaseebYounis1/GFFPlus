@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>About GFF+ &mdash; User Guide</title>
+    <link rel="icon" href="./img/icon.png">
+    <link href="./lib/fontawesome-free-5.14.0-web/css/all.css" rel="stylesheet">
+    <link href="./lib/bootstrap-4.5.2-dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #566078;
+            font-family: Sans-serif;
+            margin: 0;
+            padding: 20px 14px;
+            color: #0f172a;
+        }
+        .about-card {
+            max-width: 960px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
+            overflow: hidden;
+        }
+        .about-header {
+            background: #120c36;
+            color: #ffffff;
+            padding: 16px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .about-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+            gap: 14px;
+            padding: 20px 22px;
+        }
+        .guide-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px 14px;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+        .guide-box h6 {
+            margin: 0 0 8px 0;
+            color: #1e3a8a;
+            font-weight: 700;
+            font-size: 14px;
+        }
+        .guide-box ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .guide-box li {
+            margin-bottom: 4px;
+        }
+        kbd {
+            background: #1e293b;
+            color: #f8fafc;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="about-card">
+        <div class="about-header">
+            <div>
+                <h4 style="margin: 0; font-weight: 700;">
+                    <i class="fa fa-project-diagram" style="color: #38bdf8; margin-right: 8px;"></i>
+                    Graphs From Features (GFF+) &mdash; User Guide &amp; About
+                </h4>
+                <div style="font-size: 12px; color: #cbd5e1; margin-top: 3px;">
+                    Interactive Feature Graph, Subspace Projection, Explainability (XAI), and Multimodal Point Explorer
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <a class="btn btn-info btn-sm" href="https://github.com/HaseebYounis1/GFFPlus" target="_blank" rel="noopener">
+                    <i class="fab fa-github"></i> GitHub Repository
+                </a>
+                <a class="btn btn-success btn-sm" href="https://doi.org/10.3390/a13110302" target="_blank" rel="noopener">
+                    <i class="fa fa-book"></i> Original Paper (DOI)
+                </a>
+                <button type="button" class="btn btn-outline-light btn-sm" onclick="window.close();">
+                    <i class="fa fa-times"></i> Close Tab
+                </button>
+            </div>
+        </div>
+
+        <div class="about-grid">
+            <div class="guide-box">
+                <h6><i class="fa fa-database"></i> 1. Upload Dataset &amp; Select Any Target</h6>
+                <ul>
+                    <li>Upload any <b>.csv</b> or <b>.zip</b> dataset from the Datasets screen.</li>
+                    <li>Select <b>any column</b> (class label, health condition, clustering ID, or numeric target) in the <b>TARGET</b> dropdown, then press <i class="fa fa-play"></i> to update the feature graph or projection.</li>
+                </ul>
+            </div>
+
+            <div class="guide-box">
+                <h6><i class="fa fa-sliders-h"></i> 2. Live Feature Selection &amp; Layouts</h6>
+                <ul>
+                    <li>Drag the <b>left color threshold bar</b> or the <b>XAI threshold slider</b> for real-time feature selection with live <code>/ SELECTED: X / Total</code> updates.</li>
+                    <li>Switch between 8 feature layouts (Force, Bundle, Sunburst, Pack, Heatmap, Community, Bipartite, UpSet) or filter features by name with the blue <b>Filter</b> button.</li>
+                </ul>
+            </div>
+
+            <div class="guide-box">
+                <h6><i class="fa fa-hand-paper"></i> 3. Pan, Zoom &amp; Keyboard Shortcuts</h6>
+                <ul>
+                    <li>Click the <b>Hand</b> button (<i class="fa fa-hand-paper"></i>) or <b>hold <kbd>Ctrl</kbd></b> (or <b><kbd>Space</kbd></b>) while dragging to pan either canvas smoothly.</li>
+                    <li>Use the mouse wheel or <b>+ / &minus; / Reset</b> buttons for constant-step zooming.</li>
+                    <li>Hold <kbd>Shift</kbd> + drag on the projection to brush <b>Group B</b> for contrastive comparison.</li>
+                </ul>
+            </div>
+
+            <div class="guide-box">
+                <h6><i class="fa fa-photo-video"></i> 4. Multimodal Point Data Explorer</h6>
+                <ul>
+                    <li>Attach local files, a folder, or upload a persistent media <b>.zip</b> (images, audio with waveform, video, PDF, or searchable text documents).</li>
+                    <li>Click any projected point to inspect its attached media. If no media is attached, GFF+ shows the <b>original instance's full feature names &amp; values</b> plus its nearest projected neighbors.</li>
+                </ul>
+            </div>
+
+            <div class="guide-box">
+                <h6><i class="fa fa-brain"></i> 5. Contrastive &amp; Counterfactual Subspace Inspector</h6>
+                <ul>
+                    <li>Lasso a cohort (Group A) on the projection — and optionally <kbd>Shift</kbd>+lasso Group B — to compute local contrastive drivers (Cohen's d, Welch t-test, Benjamini-Hochberg FDR) in the bottom dock.</li>
+                    <li>Hover or click candidate features to preview counterfactual subspace perturbations and quality deltas.</li>
+                </ul>
+            </div>
+
+            <div class="guide-box">
+                <h6><i class="fa fa-camera-retro"></i> 6. VisPipeline Exports &amp; Full-Fit Screenshots</h6>
+                <ul>
+                    <li>Export VisPipeline-compatible <b>.prj</b> (automatically preserving CSV filenames with extensions) and <b>.data</b> files.</li>
+                    <li>Use the PNG screenshot button (<i class="fas fa-image"></i>) on any canvas, Contrastive Inspector, or Point Files viewer — or click <b>Screenshot All</b> in the top bar for one combined full-fit snapshot.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
