@@ -226,7 +226,7 @@ function chart_bipartite(idview, selft, vertexcolorf) {
         });
 
         gelem("topleft1").innerHTML = "FEATURES: " + self.features.length + " / INSTANCES: " + self.instances.length;
-        gelem("topright1").innerHTML = "/ SELECTED: " + ids.length;
+        gelem("topright1").innerHTML = "/ SELECTED: " + ids.length + " / " + self.features.length;
 
         if (ids.length > 0) {
             var names = [];

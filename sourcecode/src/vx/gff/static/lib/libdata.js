@@ -364,6 +364,7 @@ function GraphFromFeatures() {
 
         if (self.layoutfeatures != null && !options.skipFeatureHighlight) {
             self.layoutfeatures.highlightforce(self.featureselected, {"silent": true});
+                            self.applyPanModeState("features");
         }
 
         if (gvalue('projection') == "simple" && !gvalue("submodular_size")) {
@@ -455,6 +456,42 @@ function GraphFromFeatures() {
         }
         var prefix = sanitizeExportFilename(self.datafileselectedname, "instance");
         return prefix + "_" + id;
+    };
+
+    this.panModeFeatures = false;
+    this.panModeInstances = false;
+
+    this.applyPanModeState = function (which) {
+        if (which === "features" || !which) {
+            var btnF = gelem("btnPanFeatures");
+            if (btnF) {
+                btnF.classList.toggle("btn-primary", !!self.panModeFeatures);
+                btnF.classList.toggle("btn-light", !self.panModeFeatures);
+            }
+            if (self.layoutfeatures && self.layoutfeatures.zoomController && self.layoutfeatures.zoomController.setPanMode) {
+                self.layoutfeatures.zoomController.setPanMode(self.panModeFeatures);
+            }
+        }
+        if (which === "instances" || !which) {
+            var btnI = gelem("btnPanInstances");
+            if (btnI) {
+                btnI.classList.toggle("btn-primary", !!self.panModeInstances);
+                btnI.classList.toggle("btn-light", !self.panModeInstances);
+            }
+            if (self.layoutinstance && self.layoutinstance.zoomController && self.layoutinstance.zoomController.setPanMode) {
+                self.layoutinstance.zoomController.setPanMode(self.panModeInstances);
+            }
+        }
+    };
+
+    this.togglePanFeatures = function () {
+        self.panModeFeatures = !self.panModeFeatures;
+        self.applyPanModeState("features");
+    };
+
+    this.togglePanInstances = function () {
+        self.panModeInstances = !self.panModeInstances;
+        self.applyPanModeState("instances");
     };
 
     this.zoomFeatures = function (direction) {
@@ -2338,6 +2375,7 @@ function GraphFromFeatures() {
                         //var data = ds["layoutinstance"];
                         argms = {"infleft": 'infleft2',"infright": 'infright2'};
                         self.layoutinstance = new plotProjection(ProjectionColorF, "#visp", self, argms);
+                        self.applyPanModeState("instances");
                         if (!self.updateProjectionFallbackStatus(ds)) {
                             var q = ds.layoutinstance.quality;
                             if (q) {

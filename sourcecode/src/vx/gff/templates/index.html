@@ -497,6 +497,7 @@
                                                 <input id="xaithreshold" type="range" min="0" max="100" value="0"
                                                     title="XAI Importance threshold"
                                                     style="flex: 1 1 36px; min-width: 30px; max-width: 72px; vertical-align: middle;"
+                                                    oninput="GFFOBJ.selectXAIThreshold(this.value/100.0);"
                                                     onchange="GFFOBJ.selectXAIThreshold(this.value/100.0);"
                                                 >
                                                 <a href="#" class="btn btn-primary btn-sm"
@@ -656,6 +657,14 @@
                                                                         style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
                                                                     >
                                                                         <i class="fa fa-compress-arrows-alt" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
+                                                                    <div style="height: 2px"></div>
+                                                                    <a href="#" id="btnPanFeatures" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.togglePanFeatures();"
+                                                                        title="Hand tool: drag to move/pan canvas"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-hand-paper" style="padding: 0; margin: 0; width: 100%;"></i>
                                                                     </a>
                                                                     <div style="height: 3px"></div>
                                                                     <a href="#" class="btn btn-dark btn-sm"
@@ -1219,6 +1228,14 @@
                                                                         style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
                                                                     >
                                                                         <i class="fa fa-compress-arrows-alt" style="padding: 0; margin: 0; width: 100%;"></i>
+                                                                    </a>
+                                                                    <div style="height: 2px"></div>
+                                                                    <a href="#" id="btnPanInstances" class="btn btn-light btn-sm"
+                                                                        onclick="event.preventDefault(); GFFOBJ.togglePanInstances();"
+                                                                        title="Hand tool: drag to move/pan canvas"
+                                                                        style="width: 100%; padding: 1px; border: 1px solid #cbd5e1;"
+                                                                    >
+                                                                        <i class="fa fa-hand-paper" style="padding: 0; margin: 0; width: 100%;"></i>
                                                                     </a>
                                                                     <div style="height: 3px"></div>
                                                                     

@@ -81,8 +81,7 @@ function chart_palettecolors(functionT, id, w, h, colorf) {
             var pointerY = d3.mouse(this)[1];
             var deltaY = (pointerY - dragStartY) * dragSensitivity;
             var nextY = clampY(dragStartHandleY + deltaY);
-            applyHandleVisual(nextY);
-            showThresholdTooltip(yToThreshold(nextY));
+            commitThreshold(nextY, false);
         })
         .on("end", function () {
             commitThreshold(currentY, true);

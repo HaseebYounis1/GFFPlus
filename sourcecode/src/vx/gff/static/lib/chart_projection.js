@@ -116,6 +116,9 @@ function plotProjection(projectioncolorf, idview, selfgff, argms) {
     var didDrag = false;
 
     var drag = d3.drag()
+        .filter(function () {
+            return !(self.zoomController && self.zoomController.isPanMode()) && !d3.event.button && !d3.event.altKey;
+        })
         .on("start", function () {
             var srcEvt = d3.event && d3.event.sourceEvent ? d3.event.sourceEvent : null;
             isGroupBDrag = !!(srcEvt && srcEvt.shiftKey) || (selfgff.ispresskey == 2);

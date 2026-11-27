@@ -99,6 +99,9 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     var lassoPath;
     var closePath;
     self.drag = d3.drag()
+        .filter(function () {
+            return !(self.zoomController && self.zoomController.isPanMode()) && !d3.event.button && !d3.event.altKey;
+        })
         .on("start", function () {
             self.stopforce();
 
@@ -521,12 +524,11 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
     this.selectbythreshold = function (T1) {
         self.T1 = T1;
         var i, d;
-        var d;
         selft.featureselected = [];
         var taindex = selft.auxfeatureselectedf[selft.target];
         for (i = 0; i < self.graph.nodes.length; ++i) {
             d = self.graph.nodes[i];
-            if (d.category == 0 && self.nodeColorMetric(d) >= self.T1 && d.name != taindex) {
+            if (d.category == 0 && d.name != taindex && (self.T1 <= 0 || self.nodeColorMetric(d) >= self.T1)) {
                 selft.featureselected.push(d.name);
             }
         }
@@ -545,8 +547,16 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             selectedMap[ids[k]] = 1;
         }
 
+        var taindex = selft.auxfeatureselectedf[selft.target];
+        var totalFeatures = 0;
+        for (var tn = 0; tn < self.graph.nodes.length; ++tn) {
+            var nd = self.graph.nodes[tn];
+            if (nd && nd.category == 0 && (selft.intarget || nd.name != taindex)) {
+                totalFeatures++;
+            }
+        }
         var esel = gelem(self.argms["infright"]);
-        esel.innerHTML = "/ SELECTED: " + ids.length;
+        esel.innerHTML = "/ SELECTED: " + ids.length + " / " + totalFeatures;
         if (ids.length > 0) {
             if (self.iscoloslider) {
                 self.iscoloslider = false;
@@ -565,7 +575,7 @@ function chart_force(vertexcolorf, edgecolorf, selft, idview, foncebi, argmsi) {
             selft.keepselectvertex = -1;
             self.iscoloslider = true;
             self.viewlayoutgraphtree();
-            esel.innerHTML = "/ SELECTED: " + 0;
+            esel.innerHTML = "/ SELECTED: 0 / " + totalFeatures;
         }
 
         self.node

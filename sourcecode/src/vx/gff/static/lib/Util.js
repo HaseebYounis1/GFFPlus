@@ -76,6 +76,7 @@ function createConstantZoom(svgSelection, onTransform, options) {
     var stepFactor = options.stepFactor !== undefined ? options.stepFactor : 1.25;
     var wheelStep = options.wheelStep !== undefined ? options.wheelStep : 0.18;
     var hasLassoDrag = !!options.hasLassoDrag;
+    var panMode = false;
 
     var zoomBehavior = d3.zoom()
         .scaleExtent([minScale, maxScale])
@@ -91,15 +92,28 @@ function createConstantZoom(svgSelection, onTransform, options) {
             if (d3.event.type === "wheel") {
                 return true;
             }
+            if (panMode) {
+                return !d3.event.button;
+            }
             if (hasLassoDrag) {
                 // Allow middle-button or Alt+drag to pan without conflicting with lasso drag
                 return d3.event.button === 1 || !!d3.event.altKey;
             }
             return !d3.event.button;
         })
+        .on("start", function () {
+            if (panMode && d3.event.sourceEvent && d3.event.sourceEvent.type === "mousedown") {
+                svgSelection.style("cursor", "grabbing");
+            }
+        })
         .on("zoom", function () {
             if (onTransform) {
                 onTransform(d3.event.transform);
+            }
+        })
+        .on("end", function () {
+            if (panMode) {
+                svgSelection.style("cursor", "grab");
             }
         });
 
@@ -107,6 +121,13 @@ function createConstantZoom(svgSelection, onTransform, options) {
 
     return {
         behavior: zoomBehavior,
+        setPanMode: function (enabled) {
+            panMode = !!enabled;
+            svgSelection.style("cursor", panMode ? "grab" : null);
+        },
+        isPanMode: function () {
+            return panMode;
+        },
         zoomIn: function () {
             svgSelection.transition().duration(140).call(zoomBehavior.scaleBy, stepFactor);
         },

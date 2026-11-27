@@ -446,6 +446,12 @@ html, body {
   white-space: nowrap;
 }
 
+#topright1, #infright1, #topright2, #infright2 {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 #gffBottomDock {
   margin: 6px auto 0 auto;
   box-sizing: border-box;

@@ -75,7 +75,7 @@ function chart_upset(idview, selft, vertexcolorf) {
         gelem("topleft1").innerHTML = "TOTAL: " + self.graph.nodes.filter(function (d) {
             return d.category == 0;
         }).length;
-        gelem("topright1").innerHTML = "/ SELECTED: " + ids.length;
+        gelem("topright1").innerHTML = "/ SELECTED: " + ids.length + " / " + self.graph.nodes.filter(function (d) { return d.category == 0; }).length;
 
         if (ids.length > 0) {
             var names = [];

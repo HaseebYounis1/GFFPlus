@@ -212,7 +212,7 @@ function chart_sunburst(idview, vertexcolorf, selft, argmsi){
             });
 
         var esel = gelem(self.argms["infright"]);
-        esel.innerHTML = "/ SELECTED: " + ids.length;
+        esel.innerHTML = "/ SELECTED: " + ids.length + " / " + self.graph.nodes.filter(function (d) { return d.category == 0; }).length;
 
         if (ids.length > 0) {
             var filterfe = [];

@@ -199,7 +199,7 @@ function chart_feature_community(idview, selft, vertexcolorf, edgecolorf) {
             });
 
         gelem("topleft1").innerHTML = "COMMUNITIES: " + self.communities.length;
-        gelem("topright1").innerHTML = "/ SELECTED: " + ids.length;
+        gelem("topright1").innerHTML = "/ SELECTED: " + ids.length + " / " + self.graph.nodes.filter(function (d) { return d.category == 0; }).length;
 
         if (ids.length > 0) {
             var names = [];
