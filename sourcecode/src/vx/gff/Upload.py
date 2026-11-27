@@ -22,7 +22,8 @@ ALLOWED_MEDIA_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
     ".wav", ".mp3", ".ogg", ".flac", ".m4a",
     ".mp4", ".webm", ".ogv", ".mov",
-    ".pdf", ".txt", ".csv", ".json", ".md", ".xml", ".log", ".yaml", ".yml",
+    ".pdf", ".txt", ".csv", ".tsv", ".json", ".md", ".xml", ".log", ".yaml", ".yml",
+    ".html", ".htm", ".rst", ".tex", ".srt", ".vtt",
 }
 
 

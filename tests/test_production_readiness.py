@@ -238,6 +238,55 @@ class TestStaticUIAndDOMIntegrity(unittest.TestCase):
             txt = (STATIC_LIB / chart_name).read_text(encoding="utf-8", errors="ignore")
             self.assertIn("lheight", txt, f"{chart_name} must support responsive lheight")
 
+    def test_generic_text_viewer_and_dataset_builder(self):
+        """Verify generic text viewer in libdata.js, exemplary text_80 dataset, and reusable builder."""
+        for fn_name in ("getInlineTextForPoint", "renderPointTextDocument", "filterPointTextSearch"):
+            self.assertIn(fn_name, self.libdata_js)
+
+        demo_dir = ROOT / "dataset" / "demo_multimodal" / "text_80_documents"
+        demo_csv = demo_dir / "text_80.csv"
+        demo_zip = demo_dir / "text_80_media.zip"
+        self.assertTrue(demo_csv.is_file(), "Missing demo text_80.csv")
+        self.assertTrue(demo_zip.is_file(), "Missing demo text_80_media.zip")
+        with zipfile.ZipFile(demo_zip, "r") as zf:
+            names = zf.namelist()
+            self.assertEqual(len(names), 80)
+
+        # Test generic builder on arbitrary custom folder + arbitrary custom CSV
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "prepare_text_dataset",
+            str(ROOT / "dataset" / "demo_multimodal" / "prepare_text_dataset.py"),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            # Mode 1: generic folder with class subfolders
+            src_dir = td_path / "custom_docs"
+            (src_dir / "positive").mkdir(parents=True)
+            (src_dir / "negative").mkdir(parents=True)
+            (src_dir / "positive" / "a.txt").write_text("Excellent product, fast delivery and great build quality.", encoding="utf-8")
+            (src_dir / "negative" / "b.md").write_text("Broken screen on arrival, terrible customer support.", encoding="utf-8")
+            recs = mod.load_from_directory(src_dir)
+            out_csv = mod.build_gff_text_bundle(recs, td_path / "out_dir", dataset_name="custom_dir", max_tfidf_features=8)
+            self.assertTrue(out_csv.is_file())
+            self.assertTrue((td_path / "out_dir" / "custom_dir_media.zip").is_file())
+
+            # Mode 2: generic CSV with arbitrary text column
+            in_csv = td_path / "arbitrary.csv"
+            in_csv.write_text(
+                'review_body,sentiment\n'
+                '"Loved the soundtrack and cinematography.",pos\n'
+                '"Plot was slow and predictable.",neg\n',
+                encoding="utf-8",
+            )
+            recs2 = mod.load_from_csv(in_csv, text_col="review_body", label_col="sentiment")
+            out_csv2 = mod.build_gff_text_bundle(recs2, td_path / "out_csv", dataset_name="custom_csv", max_tfidf_features=8)
+            self.assertTrue(out_csv2.is_file())
+            self.assertTrue((td_path / "out_csv" / "custom_csv_media.zip").is_file())
+
 
 class TestLiveServerEndToEnd(AsyncHTTPTestCase):
     def setUp(self):

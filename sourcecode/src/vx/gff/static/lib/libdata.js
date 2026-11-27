@@ -555,7 +555,7 @@ function GraphFromFeatures() {
             isAudio: mime.indexOf("audio/") === 0 || /\.(wav|mp3|ogg|flac|m4a)$/i.test(lower),
             isVideo: mime.indexOf("video/") === 0 || /\.(mp4|webm|ogv|mov)$/i.test(lower),
             isPdf: mime === "application/pdf" || /\.pdf$/i.test(lower),
-            isText: mime.indexOf("text/") === 0 || /\.(txt|csv|json|md|xml|log|yaml|yml)$/i.test(lower),
+            isText: mime.indexOf("text/") === 0 || mime === "application/json" || /\.(txt|csv|tsv|json|md|xml|log|yaml|yml|html?|rst|tex|srt|vtt)$/i.test(lower),
             textPreview: null
         };
     };
@@ -705,6 +705,122 @@ function GraphFromFeatures() {
         self.openPointDataModal(points[nextIdx].id);
     };
 
+    this._activeModalTextRaw = "";
+
+    this.getInlineTextForPoint = function (pointId, featureRow) {
+        var candidates = [];
+        var rawLbl = String(self.getInstanceLabel(pointId) || "").trim();
+        if (rawLbl.length >= 24 && !/^(https?:\/\/|data:)/i.test(rawLbl) && rawLbl.indexOf(" ") >= 0) {
+            candidates.push({ label: "Selected Label Column", text: rawLbl });
+        }
+        if (featureRow && typeof featureRow === "object") {
+            var preferred = /^(text|document|doc|abstract|review|content|body|article|message|description|snippet|comment|title|headline|notes?|summary|transcript)$/i;
+            var keys = Object.keys(featureRow);
+            for (var i = 0; i < keys.length; ++i) {
+                var k = keys[i];
+                var v = String(featureRow[k] === undefined || featureRow[k] === null ? "" : featureRow[k]).trim();
+                if (!v) continue;
+                if (preferred.test(k) && v.length >= 8 && isNaN(Number(v))) {
+                    candidates.unshift({ label: k, text: v });
+                } else if (v.length >= 40 && isNaN(Number(v)) && v.indexOf(" ") >= 0) {
+                    candidates.push({ label: k, text: v });
+                }
+            }
+        }
+        return candidates.length > 0 ? candidates[0] : null;
+    };
+
+    this.renderPointTextDocument = function (rawText, fileName, sourceLabel) {
+        var textStr = String(rawText === undefined || rawText === null ? "" : rawText);
+        if (fileName && /\.json$/i.test(fileName)) {
+            try {
+                textStr = JSON.stringify(JSON.parse(textStr), null, 2);
+            } catch (e) {}
+        }
+        self._activeModalTextRaw = textStr;
+        var pre = gelem("pdmTextContent");
+        var statsEl = gelem("pdmTextStats");
+        var matchEl = gelem("pdmTextMatchCount");
+        if (statsEl) {
+            var trimmed = textStr.trim();
+            var words = trimmed ? trimmed.split(/\s+/).length : 0;
+            var lines = textStr ? textStr.split(/\r?\n/).length : 0;
+            var badge = sourceLabel ? (sourceLabel + " · ") : "";
+            statsEl.textContent = badge + words + " words · " + textStr.length + " chars · " + lines + " lines";
+        }
+        if (matchEl) {
+            matchEl.textContent = "";
+        }
+        if (pre) {
+            pre.textContent = textStr;
+        }
+    };
+
+    this.filterPointTextSearch = function (query) {
+        var pre = gelem("pdmTextContent");
+        var matchEl = gelem("pdmTextMatchCount");
+        if (!pre) return;
+        var raw = self._activeModalTextRaw || "";
+        var q = String(query || "").trim();
+        if (!q) {
+            pre.textContent = raw;
+            if (matchEl) matchEl.textContent = "";
+            return;
+        }
+        var escapedQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        var re = new RegExp(escapedQ, "gi");
+        var count = 0;
+        var parts = [];
+        var lastIdx = 0;
+        var m;
+        while ((m = re.exec(raw)) !== null) {
+            if (m.index > lastIdx) {
+                parts.push(self.escapeHTML(raw.slice(lastIdx, m.index)));
+            }
+            parts.push("<mark style='background:#facc15; color:#0f172a; padding:0 2px; border-radius:2px;'>" + self.escapeHTML(m[0]) + "</mark>");
+            count++;
+            lastIdx = m.index + m[0].length;
+            if (m[0].length === 0) {
+                re.lastIndex++;
+            }
+        }
+        if (lastIdx < raw.length) {
+            parts.push(self.escapeHTML(raw.slice(lastIdx)));
+        }
+        pre.innerHTML = parts.join("");
+        if (matchEl) {
+            matchEl.textContent = count + (count === 1 ? " match" : " matches");
+        }
+    };
+
+    this.togglePointTextWrap = function () {
+        var pre = gelem("pdmTextContent");
+        if (!pre) return;
+        var isWrapped = pre.style.whiteSpace !== "pre";
+        pre.style.whiteSpace = isWrapped ? "pre" : "pre-wrap";
+    };
+
+    this.copyPointTextContent = function () {
+        var raw = self._activeModalTextRaw || "";
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(raw).catch(function () {});
+        }
+    };
+
+    this._buildTextReaderHtml = function (headerLabel) {
+        return "<div style='width:100%; display:flex; flex-direction:column; height:58vh; background:#0f172a; border:1px solid #334155; border-radius:5px; overflow:hidden;'>" +
+            "<div style='display:flex; align-items:center; gap:6px; padding:6px 8px; background:#1e293b; border-bottom:1px solid #334155; flex-wrap:wrap;'>" +
+                "<span style='font-size:11px; font-weight:600; color:#e2e8f0;'><i class='fa fa-file-alt' style='color:#38bdf8; margin-right:4px;'></i>" + self.escapeHTML(headerLabel || "Document") + "</span>" +
+                "<span id='pdmTextStats' style='font-size:10px; color:#94a3b8; margin-right:auto;'></span>" +
+                "<input id='pdmTextSearch' type='text' placeholder='Search text...' oninput='GFFOBJ.filterPointTextSearch(this.value);' style='width:130px; height:22px; font-size:10px; padding:2px 6px; border-radius:3px; border:1px solid #475569; background:#0f172a; color:#f8fafc;'>" +
+                "<span id='pdmTextMatchCount' style='font-size:10px; color:#facc15;'></span>" +
+                "<button type='button' class='btn btn-outline-light btn-sm' style='padding:1px 6px; font-size:10px;' onclick='GFFOBJ.togglePointTextWrap();' title='Toggle word wrap'>Wrap</button>" +
+                "<button type='button' class='btn btn-outline-info btn-sm' style='padding:1px 6px; font-size:10px;' onclick='GFFOBJ.copyPointTextContent();' title='Copy document text'><i class='fa fa-copy'></i></button>" +
+            "</div>" +
+            "<pre id='pdmTextContent' style='flex:1 1 auto; width:100%; overflow:auto; text-align:left; background:#0f172a; color:#e2e8f0; padding:12px 14px; font-size:12px; line-height:1.55; white-space:pre-wrap; word-break:break-word; margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;'>Loading document...</pre>" +
+        "</div>";
+    };
+
     this.openPointDataModal = function (pointId) {
         self.activePointId = pointId;
         if (self.layoutinstance && self.layoutinstance.focusPoint) {
@@ -765,7 +881,7 @@ function GraphFromFeatures() {
             } else if (pf.isPdf) {
                 stageHtml = "<iframe src='" + pf.url + "' style='width:100%; height:58vh; border:none; background:#fff; border-radius:3px;'></iframe>";
             } else if (pf.isText) {
-                stageHtml = "<pre id='pdmTextContent' style='width:100%; max-height:58vh; overflow:auto; text-align:left; background:#1e293b; color:#e2e8f0; padding:10px; border-radius:4px; font-size:11px; margin:0;'>Loading text file...</pre>";
+                stageHtml = self._buildTextReaderHtml(pf.name);
             } else {
                 stageHtml = "<div style='text-align:center; padding:24px;'>" +
                     "<i class='fa fa-file fa-4x' style='color:#64748b; margin-bottom:10px;'></i>" +
@@ -773,6 +889,20 @@ function GraphFromFeatures() {
                     "<a href='" + pf.url + "' target='_blank' rel='noopener' class='btn btn-info btn-sm' style='margin-top:10px;'>Open / Download File</a></div>";
             }
         } else {
+            var fallbackRow = null;
+            if (Array.isArray(self.dataload) && self.dataload.length > 0) {
+                if (Array.isArray(self.dataloadids)) {
+                    var fPos = self.dataloadids.indexOf(parseInt(pointId, 10));
+                    if (fPos >= 0 && self.dataload[fPos]) fallbackRow = self.dataload[fPos];
+                }
+                if (!fallbackRow && self.dataload[parseInt(pointId, 10)]) {
+                    fallbackRow = self.dataload[parseInt(pointId, 10)];
+                }
+            }
+            var inlineDoc = self.getInlineTextForPoint(pointId, fallbackRow);
+            if (inlineDoc) {
+                stageHtml = self._buildTextReaderHtml(inlineDoc.label);
+            } else {
             stageHtml = "<div style='text-align:center; padding:24px; max-width:340px;'>" +
                 "<i class='fa fa-photo-video fa-3x' style='color:#64748b; margin-bottom:10px;'></i>" +
                 "<div style='font-size:13px; font-weight:600; margin-bottom:6px;'>No media file attached to Point #" + self.escapeHTML(pointId) + "</div>" +
@@ -782,6 +912,7 @@ function GraphFromFeatures() {
                     "<button type='button' class='btn btn-secondary btn-sm' onclick='gelem(\"pointfolderinput\").click();'><i class='fa fa-folder-open'></i> Folder</button>" +
                     "<button type='button' class='btn btn-warning btn-sm' onclick='gelem(\"pointmediazipinput\").click();'><i class='fa fa-file-archive'></i> Upload ZIP</button>" +
                 "</div></div>";
+            }
         }
         stage.innerHTML = stageHtml;
 
@@ -854,25 +985,31 @@ function GraphFromFeatures() {
         }
         if (pf && pf.isText) {
             if (pf.textPreview !== null) {
-                var pre = gelem("pdmTextContent");
-                if (pre) pre.textContent = pf.textPreview;
+                self.renderPointTextDocument(pf.textPreview, pf.name, "File");
             } else if (pf.file) {
                 var reader = new FileReader();
                 reader.onload = function (ev) {
-                    pf.textPreview = String(ev.target.result || "").slice(0, 8000);
-                    var el = gelem("pdmTextContent");
-                    if (el) el.textContent = pf.textPreview;
+                    var fullTxt = String(ev.target.result || "");
+                    pf.textPreview = fullTxt.length > 65536
+                        ? (fullTxt.slice(0, 65536) + "\n\n... [truncated at 64 KB — click Open to view full file]")
+                        : fullTxt;
+                    self.renderPointTextDocument(pf.textPreview, pf.name, "Local File");
                 };
-                reader.readAsText(pf.file.slice(0, 16384));
+                reader.readAsText(pf.file.slice(0, 65536));
             } else if (pf.url) {
                 fetch(pf.url, { credentials: "same-origin" })
                     .then(function (r) { return r.text(); })
                     .then(function (txt) {
-                        pf.textPreview = txt.slice(0, 8000);
-                        var el = gelem("pdmTextContent");
-                        if (el) el.textContent = pf.textPreview;
-                    }).catch(function () {});
+                        pf.textPreview = txt.length > 65536
+                            ? (txt.slice(0, 65536) + "\n\n... [truncated at 64 KB — click Open to view full file]")
+                            : txt;
+                        self.renderPointTextDocument(pf.textPreview, pf.name, "Server Media");
+                    }).catch(function () {
+                        self.renderPointTextDocument("Could not load text file.", pf.name, "Error");
+                    });
             }
+        } else if (!pf && typeof inlineDoc !== "undefined" && inlineDoc) {
+            self.renderPointTextDocument(inlineDoc.text, inlineDoc.label, "Inline CSV Text");
         }
         self.renderPointFilesPanel(
             (self.layoutinstance && self.layoutinstance.selected && self.layoutinstance.selected.length > 0)

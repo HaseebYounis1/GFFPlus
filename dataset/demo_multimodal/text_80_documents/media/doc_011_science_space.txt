@@ -1,0 +1,7 @@
+Title: Exoplanet Atmospheric Spectrometer Mapped Key Breakthrough in Science & Space
+Topic: Science & Space | Tone: Briefing | Date: 2026-12-07 | Ref: DOC-111
+========================================================================
+
+Executive Summary: Key takeaways are distilled below for rapid cross-disciplinary review.
+
+A recent exoplanet atmospheric spectrometer mapped crystalline water ice deposits preserved beneath shadowed polar craters. The observatory consortium published calibrated FITS archives for independent verification. Astronomers and planetary physicists reviewed telemetry streams across 14 ground antennas.
